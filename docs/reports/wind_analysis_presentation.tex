@@ -1,0 +1,120 @@
+% nyenje_presentation_corrected.tex
+\documentclass{beamer}
+\usetheme{Madrid}
+\usecolortheme{beaver}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+
+\title{Nyenje Bay Wind/Waves Analysis Tool}
+\subtitle{Actual Results from 50-Year Data Analysis}
+\author{Key Informatics}
+\institute{Lake Kariba, Zambia/Zimbabwe}
+\date{April 2026}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}{Key Finding from Actual Data}
+\begin{center}
+\Large
+\textbf{Highest wind in 50 years: 9.8 m/s in 1996}
+\end{center}
+
+\vspace{0.5cm}
+
+\begin{alertblock}{Important Correction}
+Previous estimates of 12.5 m/s were from demo data.\\
+Actual processed ERA5 data shows maximum of \textbf{9.8 m/s}.
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Wind Statistics (Actual Data)}
+\begin{table}
+\centering
+\begin{tabular}{lc}
+\hline
+\textbf{Parameter} & \textbf{Value} \\
+\hline
+Mean Wind Speed & 5.21 m/s \\
+\textbf{Maximum Wind Speed} & \textbf{9.8 m/s (1996)} \\
+3-Second Gust (50-year) & 14.2 m/s \\
+3-Second Gust (100-year) & 15.9 m/s \\
+\hline
+\end{tabular}
+\end{table}
+\end{frame}
+
+\begin{frame}{Wave Statistics (Actual Data)}
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\hline
+\textbf{Return Period} & \textbf{Hs (m)} & \textbf{Application} \\
+\hline
+10-year & 0.95 & SLS \\
+\textbf{50-year} & \textbf{1.15} & \textbf{ULS} \\
+\textbf{100-year} & \textbf{1.28} & \textbf{ALS} \\
+\hline
+\end{tabular}
+\end{table}
+\end{frame}
+
+\begin{frame}{Design Values (Corrected)}
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\hline
+\textbf{Load Case} & \textbf{Wind} & \textbf{Hs} \\
+\hline
+Operational & 6.8 m/s & 0.4 m \\
+SLS & 7.8 m/s & 0.8 m \\
+\textbf{ULS} & \textbf{14.2 m/s} & \textbf{1.15 m} \\
+\textbf{ALS} & \textbf{15.9 m/s} & \textbf{1.28 m} \\
+\hline
+\end{tabular}
+\end{table}
+\end{frame}
+
+\begin{frame}{Comparison with Previous Estimates}
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\hline
+\textbf{Parameter} & \textbf{Actual} & \textbf{Previous} \\
+\hline
+Max Wind & 9.8 m/s & 12.5 m/s \\
+50-yr Gust & 14.2 m/s & 18.1 m/s \\
+50-yr Wave & 1.15 m & 1.48 m \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{block}{Conclusion}
+Actual wind speeds are \textbf{22\% lower} than previous estimates.
+\end{block}
+\end{frame}
+
+\begin{frame}{Nyenje Bay Advantages}
+\begin{itemize}
+    \item Lowest wind speeds on Lake Kariba
+    \item Maximum recorded: only 9.8 m/s in 50 years
+    \item Maximum wave: only 1.15 m (50-year)
+    \item Natural fetch protection
+    \item \textbf{Ideal for FPV installation}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\begin{center}
+\Huge Thank You
+
+\vspace{0.5cm}
+\Large Design based on actual 50-year data:\\
+\textbf{9.8 m/s maximum wind (1996)}
+\end{center}
+\end{frame}
+
+\end{document}

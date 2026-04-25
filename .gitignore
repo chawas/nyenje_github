@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+*.egg
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Large data files (optional - exclude if you want to keep them)
+*.nc
+*.grib
+*.grb
+*.grib2
+*.wnd
+*.exe
+
+# SWAN outputs
+swan/outputs/
+swan/inputs_archive/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

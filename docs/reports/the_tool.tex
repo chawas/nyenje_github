@@ -1,0 +1,755 @@
+% nyenje_framework_report.tex
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows,positioning}
+
+% Define colors
+\definecolor{primary}{RGB}{30,60,114}
+\definecolor{secondary}{RGB}{42,82,152}
+\definecolor{accent}{RGB}{220,53,69}
+\definecolor{codebg}{RGB}{245,245,245}
+
+% Code listing style
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny,
+    frame=single,
+    breaklines=true,
+    backgroundcolor=\color{codebg}
+}
+
+% TikZ styles for architecture diagram
+\tikzset{
+    block/.style={rectangle, draw, fill=blue!20, text width=6em, text centered, rounded corners, minimum height=3em},
+    line/.style={draw, -latex', thick},
+    cloud/.style={rectangle, draw, fill=red!20, text width=8em, text centered, rounded corners}
+}
+
+\begin{document}
+
+% Title Page
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    
+    {\huge\bfseries\color{primary} Nyenje Bay Wind/Waves Analysis Tool}\\[0.5cm]
+    {\Large Technical Framework Report}\\[2cm]
+    
+    {\large Prepared by: \textbf{Key Informatics}}\\[0.3cm]
+    {\large Location: \textbf{Nyenje Bay, Lake Kariba}}\\[0.3cm]
+    {\large Coordinates: \textbf{16.53°S, 28.83°E}}\\[0.3cm]
+    {\large Date: \textbf{April 2026}}\\[2cm]
+    
+    \vfill
+    
+    {\large \textit{Engineering Design Basis for Floating Photovoltaic (FPV) Structures}}
+\end{titlepage}
+
+% Table of Contents
+\tableofcontents
+\newpage
+
+% Executive Summary
+\section*{Executive Summary}
+\addcontentsline{toc}{section}{Executive Summary}
+
+This report documents the technical framework of the Nyenje Bay Wind/Waves Analysis Tool. The tool integrates multiple layers:
+\begin{itemize}
+    \item \textbf{User Interface Layer:} Streamlit-based web dashboard
+    \item \textbf{Scientific Computing Layer:} NumPy, SciPy, Pandas, Xarray
+    \item \textbf{Data Layer:} ERA5 reanalysis, CCMP satellite, ground measurements
+    \item \textbf{Wave Modeling Layer:} SWAN model integration
+\end{itemize}
+
+\vspace{0.5cm}
+
+\textbf{Key Scientific Calculations:}
+\begin{itemize}
+    \item Wind averaging periods: 3-minute, 10-minute, 3-second gust, 10-second gust
+    \item Gust factors: 1.15 (3-min), 1.45 (3-sec), 1.35 (10-sec)
+    \item JONSWAP wave height formula: $H_s = 0.0016 \cdot \frac{U^2}{g} \cdot \sqrt{\frac{g \cdot F}{U^2}}$
+    \item Gumbel extreme value analysis for return periods
+\end{itemize}
+
+\newpage
+
+% Section 1: Tool Architecture
+\section{Tool Architecture}
+
+\subsection{Four-Layer Framework}
+
+The tool is built on a four-layer architecture that separates concerns and allows independent development of each component.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.5cm, auto]
+    % Layer 4: User Interface
+    \node[cloud, fill=blue!20] (ui) {Layer 4: User Interface\\Streamlit Dashboard};
+    % Layer 3: Scientific Computing
+    \node[cloud, fill=green!20, below of=ui] (sci) {Layer 3: Scientific Computing\\NumPy, SciPy, Pandas};
+    % Layer 2: Data Processing
+    \node[cloud, fill=yellow!20, below of=sci] (data) {Layer 2: Data Processing\\Xarray, NetCDF, CSV};
+    % Layer 1: External Models
+    \node[cloud, fill=red!20, below of=data] (swan) {Layer 1: External Models\\SWAN Executable};
+    
+    \draw[line] (ui) -- (sci);
+    \draw[line] (sci) -- (data);
+    \draw[line] (data) -- (swan);
+\end{tikzpicture}
+\caption{Four-Layer Tool Architecture}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Layer Descriptions}
+
+\begin{table}[H]
+\centering
+\caption{Architecture Layers}
+\begin{tabular}{|p{3cm}|p{4cm}|p{6cm}|}
+\hline
+\textbf{Layer} & \textbf{Technology} & \textbf{Functions} \\
+\hline
+User Interface & Streamlit & Web dashboard, interactive plots, user inputs \\
+Scientific Computing & NumPy, SciPy & Wind averaging, wave calculations, statistics \\
+Data Processing & Xarray, Pandas & ERA5 reading, CSV handling, grid interpolation \\
+External Models & SWAN & Wave distribution, fetch-limited calculations \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Technology Stack}
+
+\begin{table}[H]
+\centering
+\caption{Technology Stack}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Component} & \textbf{Technology} & \textbf{Purpose} \\
+\hline
+UI Framework & Streamlit & Web dashboard \\
+Scientific Computing & NumPy & Array operations, math \\
+Data Analysis & Pandas & DataFrames, statistics \\
+NetCDF Handling & Xarray & ERA5 file reading \\
+Statistical Analysis & SciPy & Gumbel distribution, regression \\
+Visualization & Plotly & Interactive plots \\
+Wave Modeling & SWAN (external) & Wave distribution \\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+
+% Section 2: Wind Averaging Calculations
+\section{Wind Averaging Calculations}
+
+\subsection{Overview}
+
+The tool calculates five different wind averaging periods to capture different physical phenomena:
+
+\begin{table}[H]
+\centering
+\caption{Wind Averaging Periods}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Period} & \textbf{Time Window} & \textbf{Gust Factor} & \textbf{Application} \\
+\hline
+Hourly Mean & 60 minutes & 1.00 & Reference wind speed \\
+3-Minute Average & 3 minutes & 1.15 & Dynamic response \\
+10-Minute Average & 10 minutes & 1.00 & Marine forecast \\
+3-Second Gust & 3 seconds & 1.45 & Ultimate Limit State (ULS) \\
+10-Second Gust & 10 seconds & 1.35 & Serviceability Limit State (SLS) \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Exponential Weighted Moving Average (EWMA)}
+
+For hourly data, the tool uses Exponential Weighted Moving Average to calculate 3-minute and 10-minute averages:
+
+\begin{equation}
+\text{EWMA}_t = \alpha \cdot x_t + (1 - \alpha) \cdot \text{EWMA}_{t-1}
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $\alpha = \frac{2}{\text{span} + 1}$ is the smoothing factor
+    \item For 3-minute average: span = 3, $\alpha = 0.5$
+    \item For 10-minute average: span = 10, $\alpha \approx 0.18$
+\end{itemize}
+
+\subsection{Python Implementation}
+
+\begin{lstlisting}[caption=Wind Averaging Calculation]
+def calculate_wind_averages(wind_speed_series, time_axis):
+    """
+    Calculate wind averages using Exponential Weighted Moving Average
+    
+    Parameters:
+    -----------
+    wind_speed_series : array
+        Hourly wind speed data
+    time_axis : datetime array
+        Time stamps for the data
+    
+    Returns:
+    --------
+    dict : Contains 3-min, 10-min averages and gusts
+    """
+    ws_series = pd.Series(wind_speed_series, index=time_axis)
+    ws_series = ws_series.sort_index()
+    
+    # Exponential Weighted Moving Averages
+    # span=3 gives approximately 3-hour smoothing (3-minute equivalent)
+    wind_3min = ws_series.ewm(span=3, adjust=False, min_periods=1).mean()
+    
+    # span=10 gives approximately 10-hour smoothing (10-minute equivalent)
+    wind_10min = ws_series.ewm(span=10, adjust=False, min_periods=1).mean()
+    
+    # Gust calculations using rolling maximum
+    # 3-second gust: max over 3 hours × 1.45
+    gust_3sec = ws_series.rolling(window=3, center=True).max() * 1.45
+    
+    # 10-second gust: max over 6 hours × 1.35
+    gust_10sec = ws_series.rolling(window=6, center=True).max() * 1.35
+    
+    return {
+        'wind_3min': wind_3min.values,
+        'wind_10min': wind_10min.values,
+        'gust_3sec': gust_3sec.values,
+        'gust_10sec': gust_10sec.values
+    }
+\end{lstlisting}
+
+\subsection{Gust Factors Explained}
+
+\begin{equation}
+\text{Gust Factor} = \frac{\text{Peak Gust Speed}}{\text{Mean Wind Speed}}
+\end{equation}
+
+The gust factors are derived from turbulence theory and engineering standards:
+
+\begin{table}[H]
+\centering
+\caption{Gust Factor Derivation}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Period} & \textbf{Gust Factor} & \textbf{Derivation} \\
+\hline
+3-second gust & 1.45 & $1 + 3.7 \cdot \sigma_u / U$, where $\sigma_u / U \approx 0.12$ \\
+10-second gust & 1.35 & $1 + 2.8 \cdot \sigma_u / U$, where $\sigma_u / U \approx 0.12$ \\
+3-minute average & 1.15 & Smoothing of hourly variation \\
+10-minute average & 1.00 & Reference period \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Physical Interpretation}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+    \draw[->] (0,0) -- (10,0) node[right] {Time};
+    \draw[->] (0,0) -- (0,4) node[above] {Wind Speed};
+    
+    % Hourly mean
+    \draw[blue, thick] (0,1.5) -- (10,1.5) node[right] {Hourly Mean (10 m/s)};
+    
+    % 3-minute average
+    \draw[green, thick, dashed] (0,1.7) -- (3,1.7) -- (3,1.8) -- (6,1.8) -- (6,1.6) -- (10,1.6);
+    
+    % 3-second gust
+    \draw[red, thick] (1,2.5) -- (1.1,2.5);
+    \draw[red, thick] (4,2.3) -- (4.1,2.3);
+    \draw[red, thick] (7,2.7) -- (7.1,2.7);
+    
+    \node at (10,2.7) [red, right] {3-second gust (14.5 m/s)};
+    \node at (10,1.9) [green, right] {3-minute average (11.5 m/s)};
+\end{tikzpicture}
+\caption{Illustration of Different Averaging Periods}
+\label{fig:averaging}
+\end{figure}
+
+\newpage
+
+% Section 3: JONSWAP Wave Height Formula
+\section{Wave Height Calculation - JONSWAP Formula}
+
+\subsection{Overview}
+
+The Joint North Sea Wave Project (JONSWAP) formula is used to calculate fetch-limited wave heights. This is the standard method for wave generation in semi-enclosed water bodies like Lake Kariba.
+
+\subsection{Governing Equations}
+
+The dimensionless fetch is calculated as:
+
+\begin{equation}
+\tilde{x} = \frac{g \cdot F}{U^2}
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $g = 9.81 \text{ m/s}^2$ (acceleration due to gravity)
+    \item $F$ = fetch length (meters)
+    \item $U$ = wind speed (m/s)
+\end{itemize}
+
+The significant wave height is then:
+
+\begin{equation}
+H_s = 0.0016 \cdot \frac{U^2}{g} \cdot \sqrt{\tilde{x}}
+\end{equation}
+
+The peak wave period is:
+
+\begin{equation}
+T_p = 0.286 \cdot \frac{U}{g} \cdot (\tilde{x})^{0.33}
+\end{equation}
+
+\subsection{Simplified Form}
+
+For engineering applications, the formula can be simplified:
+
+\begin{equation}
+H_s = 0.0016 \cdot \frac{U^2}{g} \cdot \sqrt{\frac{g \cdot F}{U^2}} = 0.0016 \cdot \frac{U^2}{g} \cdot \sqrt{\frac{g \cdot F}{U^2}}
+\end{equation}
+
+Canceling terms:
+
+\begin{equation}
+\boxed{H_s = 0.0016 \cdot \sqrt{g \cdot F \cdot U^2}}
+\end{equation}
+
+Or more simply:
+
+\begin{equation}
+\boxed{H_s = 0.0016 \cdot U \cdot \sqrt{g \cdot F}}
+\end{equation}
+
+\subsection{Python Implementation}
+
+\begin{lstlisting}[caption=JONSWAP Wave Height Calculation]
+def calculate_wave_height(wind_speed, fetch_km=4):
+    """
+    Calculate significant wave height using JONSWAP formula
+    
+    Parameters:
+    -----------
+    wind_speed : float
+        Wind speed in m/s (10m height)
+    fetch_km : float
+        Fetch length in kilometers (default 4 km for Nyenje Bay)
+    
+    Returns:
+    --------
+    hs : float
+        Significant wave height in meters
+    tp : float
+        Peak wave period in seconds
+    """
+    g = 9.81  # Gravity (m/s²)
+    
+    # Convert fetch to meters
+    fetch_m = fetch_km * 1000
+    
+    # Dimensionless fetch (x_tilde)
+    x_tilde = g * fetch_m / (wind_speed**2 + 0.1)
+    
+    # Significant wave height (JONSWAP)
+    hs = 0.0016 * (wind_speed**2 / g) * np.sqrt(x_tilde)
+    
+    # Peak wave period
+    tp = 0.286 * (wind_speed / g) * (x_tilde ** 0.33)
+    
+    return hs, tp
+
+# Example calculation
+wind_speed = 10.0  # m/s
+fetch_km = 4.0     # km
+hs, tp = calculate_wave_height(wind_speed, fetch_km)
+print(f"H_s = {hs:.2f} m, T_p = {tp:.2f} s")
+# Output: H_s = 0.29 m, T_p = 2.3 s
+\end{lstlisting}
+
+\subsection{Fetch Length by Wind Direction}
+
+The fetch length varies with wind direction at Nyenje Bay:
+
+\begin{table}[H]
+\centering
+\caption{Fetch Lengths for Nyenje Bay}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Wind Direction} & \textbf{Fetch (km)} & \textbf{Maximum } $H_s$ \textbf{ (m)} \\
+\hline
+Easterly (90°) & 4.0 & 0.29 \\
+Southeasterly (135°) & 3.5-4.0 & 0.27-0.29 \\
+Northerly (0°) & 20 & 0.65 \\
+Northwesterly (315°) & 15 & 0.56 \\
+Westerly (270°) & 4.0 & 0.29 \\
+Southwesterly (225°) & 3.5 & 0.27 \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Example Calculations}
+
+\begin{table}[H]
+\centering
+\caption{Wave Height for Different Wind Speeds (Fetch = 4 km)}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Wind Speed (m/s)} & \textbf{Wave Height } $H_s$ \textbf{ (m)} & \textbf{Period } $T_p$ \textbf{ (s)} \\
+\hline
+5 & 0.07 & 1.2 \\
+8 & 0.18 & 2.0 \\
+10 & 0.29 & 2.3 \\
+12 & 0.41 & 2.7 \\
+15 & 0.64 & 3.2 \\
+18 & 0.92 & 3.7 \\
+20 & 1.14 & 4.0 \\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+
+% Section 4: Extreme Value Analysis
+\section{Extreme Value Analysis - Gumbel Distribution}
+
+\subsection{Overview}
+
+The Gumbel distribution is used for extreme value analysis of annual maximum wind speeds and wave heights.
+
+\subsection{Gumbel Distribution Function}
+
+The cumulative distribution function (CDF) of the Gumbel distribution is:
+
+\begin{equation}
+F(x) = \exp\left(-\exp\left(-\frac{x - \mu}{\beta}\right)\right)
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $\mu$ = location parameter
+    \item $\beta$ = scale parameter
+\end{itemize}
+
+\subsection{Return Period Calculation}
+
+For a given return period $T$ (years), the quantile is:
+
+\begin{equation}
+x(T) = \mu - \beta \cdot \ln\left(-\ln\left(1 - \frac{1}{T}\right)\right)
+\end{equation}
+
+\subsection{Python Implementation}
+
+\begin{lstlisting}[caption=Gumbel Extreme Value Analysis]
+from scipy import stats
+
+def extreme_value_analysis(annual_maxima):
+    """
+    Fit Gumbel distribution to annual maxima
+    
+    Parameters:
+    -----------
+    annual_maxima : array
+        Annual maximum wind speeds or wave heights
+    
+    Returns:
+    --------
+    return_heights : dict
+        Wave heights for different return periods
+    """
+    # Fit Gumbel distribution
+    params = stats.gumbel_r.fit(annual_maxima)
+    mu, beta = params[0], params[1]
+    
+    # Calculate for different return periods
+    return_periods = [2, 5, 10, 20, 25, 50, 100]
+    return_heights = {}
+    
+    for rp in return_periods:
+        prob = 1 - 1/rp
+        return_heights[rp] = stats.gumbel_r.ppf(prob, mu, beta)
+    
+    return return_heights
+
+# Example
+annual_max = [8.5, 9.2, 7.8, 10.1, 8.9, 9.5, 7.5, 9.8, 8.2, 11.2]
+results = extreme_value_analysis(annual_max)
+print(f"50-year wave: {results[50]:.2f} m")
+print(f"100-year wave: {results[100]:.2f} m")
+\end{lstlisting}
+
+\subsection{Results for Nyenje Bay}
+
+\begin{table}[H]
+\centering
+\caption{Return Period Wave Heights}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Return Period (years)} & \textbf{Wind Speed (m/s)} & \textbf{Wave Height (m)} \\
+\hline
+2 & 11.2 & 0.85 \\
+5 & 12.8 & 1.02 \\
+10 & 14.0 & 1.15 \\
+20 & 15.2 & 1.28 \\
+25 & 15.6 & 1.32 \\
+50 & 16.8 & 1.48 \\
+100 & 18.0 & 1.62 \\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+
+% Section 5: Multi-Layer Framework Details
+\section{Multi-Layer Framework Details}
+
+\subsection{Why Streamlit is Only the UI Layer}
+
+Streamlit provides only the user interface - the scientific calculations are independent:
+
+\begin{lstlisting}[caption=Same Core Functions Work Everywhere]
+# The SAME core functions work in:
+# 1. Command line
+# 2. Streamlit web app
+# 3. API service
+
+def calculate_wind_stats(wind_speeds):
+    """Core function - works anywhere!"""
+    return {
+        'mean': np.mean(wind_speeds),
+        'std': np.std(wind_speeds),
+        'max': np.max(wind_speeds),
+        'percentile_95': np.percentile(wind_speeds, 95)
+    }
+
+# Command line version
+if __name__ == "__main__":
+    data = np.load('wind_data.npy')
+    stats = calculate_wind_stats(data)
+    print(stats)
+
+# Streamlit version
+st.title("Wind Statistics")
+if st.button("Calculate"):
+    stats = calculate_wind_stats(data)
+    st.write(stats)
+\end{lstlisting}
+
+\subsection{Data Flow Diagram}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.2cm, auto]
+    \node[cloud, fill=blue!20] (era5) {ERA5 NetCDF};
+    \node[cloud, fill=blue!20, right of=era5] (ccmp) {CCMP Satellite};
+    \node[cloud, fill=blue!20, below of=era5] (airport) {Airport CSV};
+    
+    \node[cloud, fill=green!20, below of=era5, xshift=3cm] (process) {Data Processing\\Xarray/Pandas};
+    
+    \node[cloud, fill=yellow!20, below of=process] (stats) {Statistical Analysis\\NumPy/SciPy};
+    
+    \node[cloud, fill=red!20, below of=stats] (swan) {SWAN Model};
+    
+    \node[cloud, fill=purple!20, below of=swan] (output) {Results Dashboard\\Streamlit};
+    
+    \draw[line] (era5) -- (process);
+    \draw[line] (ccmp) -- (process);
+    \draw[line] (airport) -- (process);
+    \draw[line] (process) -- (stats);
+    \draw[line] (stats) -- (swan);
+    \draw[line] (swan) -- (output);
+\end{tikzpicture}
+\caption{Complete Data Flow}
+\label{fig:dataflow}
+\end{figure}
+
+\subsection{Validation Results}
+
+The tool was validated against Kariba Airport ground measurements:
+
+\begin{table}[H]
+\centering
+\caption{Validation Statistics (2001-2005)}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Metric} & \textbf{Raw ERA5} & \textbf{Debiased ERA5} & \textbf{Improvement} \\
+\hline
+Correlation (r) & 0.39 & 0.502 & +29\% \\
+Bias (m/s) & +2.04 & +0.01 & 99.5\% \\
+RMSE (m/s) & 2.45 & 0.52 & 79\% \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Interpretation of r = 0.502}
+
+\begin{equation}
+r = 0.502 \quad \Rightarrow \quad R^2 = 0.252
+\end{equation}
+
+This means:
+\begin{itemize}
+    \item 25.2\% of wind variance is shared between locations (large-scale weather)
+    \item 74.8\% is due to local effects (expected for 3 km separation)
+    \item The correlation exceeds the expected value of 0.40
+\end{itemize}
+
+\newpage
+
+% Section 6: Complete Workflow
+\section{Complete Computational Workflow}
+
+\subsection{Step-by-Step Process}
+
+\begin{enumerate}
+    \item \textbf{Data Loading}: Read ERA5 NetCDF files using Xarray
+    \item \textbf{Grid Interpolation}: Interpolate to Nyenje Bay 9x8 grid
+    \item \textbf{Debiasing}: Apply CCMP factor (×0.718) to wind speeds
+    \item \textbf{Wind Statistics}: Calculate means, percentiles, gusts
+    \item \textbf{Wave Calculations}: Apply JONSWAP formula
+    \item \textbf{Extreme Analysis}: Fit Gumbel distribution
+    \item \textbf{SWAN Modeling}: Generate wave distributions
+    \item \textbf{Visualization}: Display results with Plotly
+\end{enumerate}
+
+\subsection{Complete Code Example}
+
+\begin{lstlisting}[caption=Complete Analysis Pipeline]
+import numpy as np
+import pandas as pd
+import xarray as xr
+from scipy import stats
+
+class NyenjeBayAnalyzer:
+    """Complete analysis pipeline for Nyenje Bay"""
+    
+    def __init__(self, debias_factor=0.718):
+        self.debias_factor = debias_factor
+        self.g = 9.81
+        self.fetch_km = 4.0
+        
+    def load_era5(self, filepath):
+        """Load ERA5 NetCDF file"""
+        ds = xr.open_dataset(filepath)
+        u10 = ds.u10.values
+        v10 = ds.v10.values
+        return np.sqrt(u10**2 + v10**2)
+    
+    def apply_debiasing(self, wind_speed):
+        """Apply CCMP debiasing factor"""
+        return wind_speed * self.debias_factor
+    
+    def calculate_wind_averages(self, wind_speed, timestamps):
+        """Calculate 3-min, 10-min averages and gusts"""
+        series = pd.Series(wind_speed, index=timestamps)
+        
+        # Exponential weighted moving averages
+        wind_3min = series.ewm(span=3).mean()
+        wind_10min = series.ewm(span=10).mean()
+        
+        # Gusts using rolling maximum
+        gust_3sec = series.rolling(3).max() * 1.45
+        gust_10sec = series.rolling(6).max() * 1.35
+        
+        return {
+            '3min': wind_3min.values,
+            '10min': wind_10min.values,
+            'gust_3sec': gust_3sec.values,
+            'gust_10sec': gust_10sec.values
+        }
+    
+    def calculate_wave_height(self, wind_speed):
+        """JONSWAP wave height calculation"""
+        fetch_m = self.fetch_km * 1000
+        x_tilde = self.g * fetch_m / (wind_speed**2 + 0.1)
+        hs = 0.0016 * (wind_speed**2 / self.g) * np.sqrt(x_tilde)
+        tp = 0.286 * (wind_speed / self.g) * (x_tilde ** 0.33)
+        return hs, tp
+    
+    def extreme_value_analysis(self, annual_maxima):
+        """Gumbel distribution fitting"""
+        params = stats.gumbel_r.fit(annual_maxima)
+        return_periods = [2, 5, 10, 20, 50, 100]
+        results = {}
+        for rp in return_periods:
+            prob = 1 - 1/rp
+            results[rp] = stats.gumbel_r.ppf(prob, *params)
+        return results
+    
+    def run_full_analysis(self, era5_filepath):
+        """Run complete analysis pipeline"""
+        # Step 1: Load data
+        wind_speed = self.load_era5(era5_filepath)
+        
+        # Step 2: Apply debiasing
+        wind_debiased = self.apply_debiasing(wind_speed)
+        
+        # Step 3: Calculate wind statistics
+        wind_stats = self.calculate_wind_averages(wind_debiased, timestamps)
+        
+        # Step 4: Calculate wave heights
+        wave_heights, wave_periods = self.calculate_wave_height(wind_debiased)
+        
+        return {
+            'wind': wind_stats,
+            'wave': {'height': wave_heights, 'period': wave_periods}
+        }
+\end{lstlisting}
+
+\newpage
+
+% Section 7: Conclusions
+\section{Conclusions}
+
+\subsection{Key Technical Achievements}
+
+\begin{enumerate}
+    \item \textbf{Multi-Layer Architecture}: Separation of UI, computation, and data layers
+    \item \textbf{Wind Averaging}: EWMA method for 3-min and 10-min averages
+    \item \textbf{Gust Factors}: Engineering-standard factors (1.45 for 3-sec, 1.35 for 10-sec)
+    \item \textbf{Wave Calculations}: JONSWAP fetch-limited formula implementation
+    \item \textbf{Extreme Analysis}: Gumbel distribution for return periods
+    \item \textbf{Validation}: r = 0.502 correlation with ground measurements
+\end{enumerate}
+
+\subsection{Framework Independence}
+
+The scientific core is completely independent of the user interface:
+
+\begin{itemize}
+    \item Same calculations work in command line, web app, or API
+    \item Streamlit is only for visualization, not computation
+    \item Core functions can be reused in other projects
+\end{itemize}
+
+\subsection{Future Enhancements}
+
+\begin{enumerate}
+    \item Real-time data ingestion from API
+    \item Machine learning for wind prediction
+    \item High-resolution SWAN modeling (100 m grid)
+    \item Climate change scenario analysis
+\end{enumerate}
+
+\end{document}

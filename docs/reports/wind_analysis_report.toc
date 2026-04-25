@@ -1,0 +1,17 @@
+\contentsline {section}{\numberline {1}Introduction}{4}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Background}{4}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Key Finding from Data Analysis}{4}{subsection.1.2}%
+\contentsline {section}{\numberline {2}Wind Analysis Results}{5}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Wind Statistics (1971-2020, Debiased)}{5}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Wind Averaging Periods}{5}{subsection.2.2}%
+\contentsline {section}{\numberline {3}Wave Analysis Results}{6}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Return Period Wave Heights (Based on 9.8 m/s Maximum)}{6}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Extreme Value Statistics}{6}{subsection.3.2}%
+\contentsline {section}{\numberline {4}Implications for FPV Design}{7}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Design Load Cases (Corrected)}{7}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Recommended Design Values}{7}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Comparison with Previous Estimates}{7}{subsection.4.3}%
+\contentsline {section}{\numberline {5}Conclusions}{8}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Key Findings from Actual Data}{8}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Design Recommendations Summary}{8}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}Key Advantages of Nyenje Bay}{8}{subsection.5.3}%
