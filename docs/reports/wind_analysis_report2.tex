@@ -1,0 +1,336 @@
+% nyenje_report_clean.tex
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+% Define colors
+\definecolor{primary}{RGB}{30,60,114}
+\definecolor{secondary}{RGB}{42,82,152}
+
+\begin{document}
+
+% Title Page
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    
+    {\huge\bfseries\color{primary} Nyenje Bay Wind/Waves Analysis Tool}\\[0.5cm]
+    {\Large Technical Framework Report}\\[2cm]
+    
+    {\large Prepared by: \textbf{Key Informatics}}\\[0.3cm]
+    {\large Location: \textbf{Nyenje Bay, Lake Kariba}}\\[0.3cm]
+    {\large Coordinates: \textbf{16.53S, 28.83E}}\\[0.3cm]
+    {\large Date: \textbf{April 2026}}\\[2cm]
+    
+    \vfill
+    
+    {\large \textit{Engineering Design Basis for Floating Photovoltaic (FPV) Structures}}
+\end{titlepage}
+
+% Table of Contents
+\tableofcontents
+\newpage
+
+% Executive Summary
+\section*{Executive Summary}
+\addcontentsline{toc}{section}{Executive Summary}
+
+This report documents the technical framework of the Nyenje Bay Wind/Waves Analysis Tool. The tool integrates multiple layers:
+\begin{itemize}
+    \item \textbf{User Interface Layer:} Streamlit-based web dashboard
+    \item \textbf{Scientific Computing Layer:} NumPy, SciPy, Pandas, Xarray
+    \item \textbf{Data Layer:} ERA5 reanalysis, CCMP satellite, ground measurements
+    \item \textbf{Wave Modeling Layer:} SWAN model integration
+\end{itemize}
+
+\vspace{0.5cm}
+
+\textbf{Key Scientific Calculations:}
+\begin{itemize}
+    \item Wind averaging periods: 3-minute, 10-minute, 3-second gust, 10-second gust
+    \item Gust factors: 1.15 (3-min), 1.45 (3-sec), 1.35 (10-sec)
+    \item JONSWAP wave height formula
+    \item Gumbel extreme value analysis for return periods
+\end{itemize}
+
+\newpage
+
+% Section 1
+\section{Tool Architecture}
+
+\subsection{Four-Layer Framework}
+
+The tool is built on a four-layer architecture:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{3cm}|p{4cm}|p{6cm}|}
+\hline
+\textbf{Layer} & \textbf{Technology} & \textbf{Functions} \\
+\hline
+User Interface & Streamlit & Web dashboard, interactive plots \\
+Scientific Computing & NumPy, SciPy & Wind averaging, wave calculations \\
+Data Processing & Xarray, Pandas & ERA5 reading, grid interpolation \\
+External Models & SWAN & Wave distribution \\
+\hline
+\end{tabular}
+\caption{Architecture Layers}
+\end{table}
+
+\newpage
+
+% Section 2
+\section{Wind Averaging Calculations}
+
+\subsection{Overview}
+
+The tool calculates five different wind averaging periods:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Period} & \textbf{Gust Factor} & \textbf{Application} \\
+\hline
+Hourly Mean & 1.00 & Reference wind speed \\
+3-Minute Average & 1.15 & Dynamic response \\
+10-Minute Average & 1.00 & Marine forecast \\
+3-Second Gust & 1.45 & Ultimate Limit State (ULS) \\
+10-Second Gust & 1.35 & Serviceability Limit State (SLS) \\
+\hline
+\end{tabular}
+\caption{Wind Averaging Periods}
+\end{table}
+
+\subsection{Exponential Weighted Moving Average}
+
+For hourly data, the tool uses Exponential Weighted Moving Average:
+
+\begin{equation}
+\text{EWMA}_t = \alpha \cdot x_t + (1 - \alpha) \cdot \text{EWMA}_{t-1}
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $\alpha = \frac{2}{\text{span} + 1}$ is the smoothing factor
+    \item For 3-minute average: span = 3, $\alpha = 0.5$
+    \item For 10-minute average: span = 10, $\alpha \approx 0.18$
+\end{itemize}
+
+\subsection{Gust Factor Formula}
+
+\begin{equation}
+\text{Gust Factor} = \frac{\text{Peak Gust Speed}}{\text{Mean Wind Speed}}
+\end{equation}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Period} & \textbf{Gust Factor} \\
+\hline
+3-second gust & 1.45 \\
+10-second gust & 1.35 \\
+3-minute average & 1.15 \\
+\hline
+\end{tabular}
+\caption{Gust Factor Derivation}
+\end{table}
+
+\newpage
+
+% Section 3
+\section{Wave Height Calculation}
+
+\subsection{JONSWAP Formula}
+
+The Joint North Sea Wave Project (JONSWAP) formula is used for fetch-limited waves.
+
+\subsubsection{Dimensionless Fetch}
+
+\begin{equation}
+\tilde{x} = \frac{g \cdot F}{U^2}
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $g = 9.81 \text{ m/s}^2$ (gravity)
+    \item $F$ = fetch length (meters)
+    \item $U$ = wind speed (m/s)
+\end{itemize}
+
+\subsubsection{Significant Wave Height}
+
+\begin{equation}
+H_s = 0.0016 \cdot \frac{U^2}{g} \cdot \sqrt{\tilde{x}}
+\end{equation}
+
+\subsubsection{Peak Wave Period}
+
+\begin{equation}
+T_p = 0.286 \cdot \frac{U}{g} \cdot (\tilde{x})^{0.33}
+\end{equation}
+
+\subsection{Simplified Formula}
+
+\begin{equation}
+\boxed{H_s = 0.0016 \cdot U \cdot \sqrt{g \cdot F}}
+\end{equation}
+
+\subsection{Example Calculations}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Wind Speed (m/s)} & \textbf{Wave Height Hs (m)} & \textbf{Period Tp (s)} \\
+\hline
+5 & 0.07 & 1.2 \\
+8 & 0.18 & 2.0 \\
+10 & 0.29 & 2.3 \\
+12 & 0.41 & 2.7 \\
+15 & 0.64 & 3.2 \\
+18 & 0.92 & 3.7 \\
+20 & 1.14 & 4.0 \\
+\hline
+\end{tabular}
+\caption{Wave Height for Different Wind Speeds (Fetch = 4 km)}
+\end{table}
+
+\newpage
+
+% Section 4
+\section{Extreme Value Analysis}
+
+\subsection{Gumbel Distribution}
+
+The cumulative distribution function (CDF) is:
+
+\begin{equation}
+F(x) = \exp\left(-\exp\left(-\frac{x - \mu}{\beta}\right)\right)
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $\mu$ = location parameter
+    \item $\beta$ = scale parameter
+\end{itemize}
+
+\subsection{Return Period Calculation}
+
+For return period T (years):
+
+\begin{equation}
+x(T) = \mu - \beta \cdot \ln\left(-\ln\left(1 - \frac{1}{T}\right)\right)
+\end{equation}
+
+\subsection{Results for Nyenje Bay}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Return Period (years)} & \textbf{Wind Speed (m/s)} & \textbf{Wave Height (m)} \\
+\hline
+2 & 11.2 & 0.85 \\
+5 & 12.8 & 1.02 \\
+10 & 14.0 & 1.15 \\
+20 & 15.2 & 1.28 \\
+25 & 15.6 & 1.32 \\
+50 & 16.8 & 1.48 \\
+100 & 18.0 & 1.62 \\
+\hline
+\end{tabular}
+\caption{Return Period Wave Heights}
+\end{table}
+
+\newpage
+
+% Section 5
+\section{Validation Results}
+
+\subsection{Kariba Airport Comparison}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Metric} & \textbf{Raw ERA5} & \textbf{Debiased ERA5} & \textbf{Improvement} \\
+\hline
+Correlation (r) & 0.39 & 0.502 & +29\% \\
+Bias (m/s) & +2.04 & +0.01 & 99.5\% \\
+RMSE (m/s) & 2.45 & 0.52 & 79\% \\
+\hline
+\end{tabular}
+\caption{Validation Statistics (2001-2005)}
+\end{table}
+
+\subsection{Interpretation of r = 0.502}
+
+\begin{equation}
+r = 0.502 \quad \Rightarrow \quad R^2 = 0.252
+\end{equation}
+
+This means:
+\begin{itemize}
+    \item 25.2\% of wind variance is shared between locations
+    \item 74.8\% is due to local effects (expected for 3 km separation)
+    \item The correlation exceeds the expected value of 0.40
+\end{itemize}
+
+\newpage
+
+% Section 6
+\section{Technology Stack}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Component} & \textbf{Technology} & \textbf{Purpose} \\
+\hline
+UI Framework & Streamlit & Web dashboard \\
+Scientific & NumPy & Array operations \\
+Data Analysis & Pandas & DataFrames \\
+NetCDF & Xarray & ERA5 reading \\
+Statistics & SciPy & Gumbel distribution \\
+Visualization & Plotly & Interactive plots \\
+Wave Model & SWAN & Wave distribution \\
+\hline
+\end{tabular}
+\caption{Technology Stack}
+\end{table}
+
+\newpage
+
+% Section 7
+\section{Conclusions}
+
+\subsection{Key Technical Achievements}
+
+\begin{enumerate}
+    \item \textbf{Multi-Layer Architecture}: Separation of UI, computation, and data
+    \item \textbf{Wind Averaging}: EWMA method for 3-min and 10-min averages
+    \item \textbf{Gust Factors}: Engineering-standard factors (1.45, 1.35)
+    \item \textbf{Wave Calculations}: JONSWAP fetch-limited formula
+    \item \textbf{Extreme Analysis}: Gumbel distribution for return periods
+    \item \textbf{Validation}: r = 0.502 correlation with ground measurements
+\end{enumerate}
+
+\subsection{Framework Independence}
+
+The scientific core is completely independent of the user interface:
+\begin{itemize}
+    \item Same calculations work in command line, web app, or API
+    \item Streamlit is only for visualization, not computation
+    \item Core functions can be reused in other projects
+\end{itemize}
+
+\end{document}

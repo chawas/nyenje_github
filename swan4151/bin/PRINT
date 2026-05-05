@@ -1,0 +1,141 @@
+1
+
+                    Execution started at 20260505.083227         
+
+
+
+                    ---------------------------------------
+                                     SWAN
+                    SIMULATION OF WAVES IN NEAR SHORE AREAS
+                             VERSION NUMBER 41.51A              
+                    ---------------------------------------
+
+
+    
+ PROJECT 'ERA5' '0600' 'ERA5 run' ' ' ' '
+    
+ MODE STATIONARY TWODIMENSIONAL
+    
+ COORDINATES CARTESIAN
+    
+ CGRID REGULAR 0.0 0.0 0.0 4000.0 3500.0 8 7 CIRCLE 36 0.04 1.00 25
+ Resolution in sigma-space: df/f =  0.1374
+    
+ INPGRID BOTTOM REGULAR 0.0 0.0 0.0 8 7 500.0 500.0
+    
+ READINP BOTTOM 1.0 'nyenje_bathymetry_9x8.bot' 1 0 FREE
+    
+ INPGRID WIND REGULAR 0.0 0.0 0.0 8 7 500.0 500.0
+    
+ READINP WIND 1 '/home/chawas/deployed/charara_github/swan4151/bin/swan_wind_archive/1971/nyenje_wind_19710101_0600.wnd' 4 0 FREE
+    
+ GEN3 KOMEN 2.36E-5 3.02E-3
+    
+ FRICTION JONSWAP CONSTANT 0.038
+    
+ BREAKING CONSTANT 1.0 0.73
+    
+ NUMERIC STOPC 0.02 0.01 0.001 98 STAT 50 0.01
+    
+ BLOCK 'COMPGRID' NOHEADER '/home/chawas/deployed/charara_github/swan4151/bin/swan_era5_debiased_outputs/1971/waves_19710101_0600.txt' LAYOUT 4 HSIGN TM01 DIR
+    
+ COMPUTE
+
+----------------------------------------------------------------
+                  COMPUTATIONAL PART OF SWAN
+----------------------------------------------------------------
+
+ Gridresolution       : MXC               9 MYC              8
+                      : MCGRD            73
+                      : MSC              26 MDC             36
+                      : MTC               1
+                      : NSTATC            0 ITERMX          50
+ Propagation flags    : ITFRE             1 IREFR            1
+ Source term flags    : IBOT              1 ISURF            1
+                      : IWCAP             1 IWIND            3
+                      : ITRIAD            0 IQUAD            2
+                      : IBRAG             0 IQCM             0
+                      : IVEG              0 ITURBV           0
+                      : IMUD              0 IICE             0
+ Spatial step         : DX       0.5000E+03 DY      0.5000E+03
+ Spectral bin         : df/f     0.1374E+00 DDIR    0.1000E+02
+ Physical constants   : GRAV     0.9810E+01 RHO     0.1025E+04
+ Wind input           : WSPEED   0.0000E+00 DIR     0.0000E+00
+                      : ICEWIND  0.00
+ Tail parameters      : E(f)     0.4000E+01 E(k)    0.2500E+01
+                      : A(f)     0.5000E+01 A(k)    0.3000E+01
+ Accuracy parameters  : DREL     0.1000E-01 NPNTS   0.9800E+02
+                      : DHABS    0.2000E-01 CURVAT  0.1000E-02
+                      : GRWMX    0.1000E+00
+ Drying/flooding      : LEVEL    0.0000E+00 DEPMIN  0.5000E-01
+ The Cartesian convention for wind and wave directions is used
+ Scheme for geographic propagation is SORDUP
+ Scheme geogr. space  : PROPSC            2 ICMAX            7
+ Scheme spectral space: CSS      0.5000E+00 CDD     0.5000E+00
+ Current is off
+ Quadruplets          : IQUAD             2
+                      : LAMBDA   0.2500E+00 CNL4    0.3000E+08
+                      : CSH1     0.5500E+01 CSH2    0.8330E+00
+                      : CSH3    -0.1250E+01
+ Maximum Ursell nr for Snl4 :    0.1000E+02
+ Triads is off
+ Bragg scattering is off
+ QC scattering is off
+ Surfbeat (IEM) is off
+ JONSWAP (`73)        : GAMMA    0.3800E-01
+ Vegetation is off
+ Turbulence is off
+ Fluid mud is off
+ Dissipation by sea ice is off
+ W-cap Komen (`84)    : EMPCOF (CDS2):   0.2360E-04
+ W-cap Komen (`84)    : APM (STPM)   :   0.3020E-02
+ W-cap Komen (`84)    : POWST        :   0.2000E+01
+ W-cap Komen (`84)    : DELTA        :   0.1000E+01
+ W-cap Komen (`84)    : POWK         :   0.1000E+01
+ Wind drag is Wu
+ Snyder/Komen wind input
+ Battjes&Janssen (`78): ALPHA    0.1000E+01 GAMMA   0.7300E+00
+ Set-up is off
+ Diffraction is off
+ Janssen (`89,`90)    : ALPHA    0.1000E-01 KAPPA   0.4100E+00
+ Janssen (`89,`90)    : RHOA     0.1280E+01 RHOW    0.1025E+04
+
+ 1st and 2nd gen. wind: CF10     0.1880E+03 CF20    0.5900E+00
+                      : CF30     0.1200E+00 CF40    0.2500E+03
+                      : CF50     0.2300E-02 CF60   -0.2230E+00
+                      : CF70     0.0000E+00 CF80   -0.5600E+00
+                      : RHOAW    0.1249E-02 EDMLPM  0.3600E-02
+                      : CDRAG    0.1230E-02 UMIN    0.1000E+01
+                      : LIM_PM   0.1300E+00
+
+  ---------------------------------------------------------------
+  First guess by 2nd generation model flags for first iteration:
+  ITER       1 GRWMX      0.1000E+23 ALFA       0.0000E+00
+  IWIND      2 IWCAP      0 IQUAD      0
+  ITRIAD     0 IBOT       1 ISURF      1
+  IVEG       0 ITURBV     0 IMUD       0        IBRAG    0
+  IICE       0 ICEWIND    0.00
+  ---------------------------------------------------------------
+ iteration    1; sweep 1
+ iteration    1; sweep 2
+ iteration    1; sweep 3
+ iteration    1; sweep 4
+ not possible to compute, first iteration
+
+  ---------------------------------------------------------------
+  Options given by user are activated for proceeding calculation:
+  ITER       2 GRWMX      0.1000E+00 ALFA       0.1000E-01
+  IWIND      3 IWCAP      1 IQUAD      2
+  ITRIAD     0 IBOT       1 ISURF      1
+  IVEG       0 ITURBV     0 IMUD       0        IBRAG    0
+  IICE       0 ICEWIND    0.00
+  ---------------------------------------------------------------
+ iteration    2; sweep 1
+ iteration    2; sweep 2
+ iteration    2; sweep 3
+ iteration    2; sweep 4
+ accuracy OK in  98.62 % of wet grid points ( 98.00 % required)
+
+
+    
+ STOP

@@ -1,0 +1,49 @@
+!----------------------------------------
+! SWAN INPUT: Stationary run for Nyenje Bay
+!----------------------------------------
+
+PROJECT 'Nyenje' 'Test'
+
+!----------------------------------------
+! MODE: stationary
+!----------------------------------------
+MODE STATIONARY
+
+!----------------------------------------
+! REFERENCE WATER LEVEL (allocates wlevl)
+!----------------------------------------
+SET LEVEL 485.0 FREE
+SET DEPMIN 0.01
+
+!----------------------------------------
+! COMPUTATIONAL GRID
+!----------------------------------------
+CGRID REGULAR 28.919616 -16.698956 0 0.01035577 0.01024969 8 7 CIRCLE 36 0.04 1.0
+
+!----------------------------------------
+! BATHYMETRY INPUT
+!----------------------------------------
+INPGRID BOTTOM REGULAR 28.919616 -16.698956 0 8 7 0.01035577 0.01024969
+READINP BOTTOM 1 'nyenje_bathymetry_8x7.bot' 0 FREE
+
+!----------------------------------------
+! WIND INPUT
+!----------------------------------------
+INPGRID WIND REGULAR 28.919616 -16.698956 0 8 7 0.01035577 0.01024969
+READINP WIND 1 'nyenje_wind_8x7.wnd' 0 FREE
+WIND VECTORS
+
+!----------------------------------------
+! BOUNDARY CONDITION (optional, but safe)
+!----------------------------------------
+SET MSC 1
+FLOW 0.0
+FHIGH 0.0
+BOUND SHAPESPEC JONSWAP 3.3
+
+!----------------------------------------
+! COMPUTE
+!----------------------------------------
+COMPUTE
+
+STOP

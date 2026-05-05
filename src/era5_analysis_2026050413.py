@@ -17,7 +17,7 @@ import streamlit as st
 # Page Configuration - MUST BE FIRST Streamlit command
 st.set_page_config(
     page_title="Key Informatics - Nyenje Bay Wind/Waves Analysis Tool v2.0",
-    #page_icon="🌊",
+    page_icon="🌊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -375,6 +375,51 @@ def create_wind_rose(speeds, directions, title):
                       legend_title="Wind Speed (m/s)", height=600)
     return fig
 
+def create_wind_parameters_plot(wind_df):
+    if wind_df is None or len(wind_df) == 0:
+        return None
+    
+    df_sample = wind_df.iloc[:1000] if len(wind_df) > 1000 else wind_df
+    
+    fig = make_subplots(
+        rows=3, cols=2,
+        subplot_titles=('Wind Speed (Hourly)', '3-Minute Average',
+                        '10-Minute Average', '3-Second Gust',
+                        '10-Second Gust', 'Wind Direction'),
+        vertical_spacing=0.12
+    )
+    
+    fig.add_trace(go.Scatter(x=df_sample['datetime'], y=df_sample['wind_speed_hourly'],
+                             mode='lines', name='Hourly', line=dict(color='blue', width=1)),
+                  row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_sample['datetime'], y=df_sample['wind_speed_3min'],
+                             mode='lines', name='3-min', line=dict(color='green', width=1.5)),
+                  row=1, col=2)
+    fig.add_trace(go.Scatter(x=df_sample['datetime'], y=df_sample['wind_speed_10min'],
+                             mode='lines', name='10-min', line=dict(color='orange', width=1.5)),
+                  row=2, col=1)
+    fig.add_trace(go.Scatter(x=df_sample['datetime'], y=df_sample['gust_3sec'],
+                             mode='lines', name='3s Gust', line=dict(color='red', width=1.5)),
+                  row=2, col=2)
+    fig.add_trace(go.Scatter(x=df_sample['datetime'], y=df_sample['gust_10sec'],
+                             mode='lines', name='10s Gust', line=dict(color='purple', width=1.5)),
+                  row=3, col=1)
+    fig.add_trace(go.Scatter(x=df_sample['datetime'], y=df_sample['wind_direction'],
+                             mode='lines', name='Direction', line=dict(color='brown', width=1)),
+                  row=3, col=2)
+    
+    fig.update_layout(height=900, title_text="Wind Parameters Analysis", showlegend=False)
+    fig.update_xaxes(title_text="Time", row=3, col=1)
+    fig.update_xaxes(title_text="Time", row=3, col=2)
+    fig.update_yaxes(title_text="Wind Speed (m/s)", row=1, col=1)
+    fig.update_yaxes(title_text="Wind Speed (m/s)", row=1, col=2)
+    fig.update_yaxes(title_text="Wind Speed (m/s)", row=2, col=1)
+    fig.update_yaxes(title_text="Wind Speed (m/s)", row=2, col=2)
+    fig.update_yaxes(title_text="Wind Speed (m/s)", row=3, col=1)
+    fig.update_yaxes(title_text="Direction (°)", row=3, col=2)
+    
+    return fig
+
 def calculate_wave_height(wind_speed, fetch_km=4):
     g = 9.81
     fetch_m = fetch_km * 1000
@@ -570,6 +615,141 @@ def process_demo_data():
     }
 
 # ============================================================================
+# SWAN Model Analysis Functions
+# ============================================================================
+def calculate_monthly_maxima(df, fetch_km, use_debiased, data_source):
+    """Calculate monthly maximum wave heights"""
+    df_copy = df.copy()
+    wind_speeds = df_copy['speed'].values
+    if use_debiased and data_source != "Demo" and "Raw" in data_source:
+        wind_speeds = wind_speeds * DEBIAS_FACTOR
+    
+    df_copy['wave_height'], _ = zip(*[calculate_wave_height(ws, fetch_km) for ws in wind_speeds])
+    df_copy['year_month'] = df_copy['datetime'].dt.strftime('%Y-%m')
+    monthly_max = df_copy.groupby('year_month')['wave_height'].max().reset_index()
+    df_copy['month'] = df_copy['datetime'].dt.month
+    monthly_stats = df_copy.groupby('month')['wave_height'].agg(['max', 'mean', 'std']).reset_index()
+    return monthly_max, monthly_stats
+
+def calculate_yearly_maxima(df, fetch_km, use_debiased, data_source):
+    """Calculate yearly maximum wave heights"""
+    df_copy = df.copy()
+    wind_speeds = df_copy['speed'].values
+    if use_debiased and data_source != "Demo" and "Raw" in data_source:
+        wind_speeds = wind_speeds * DEBIAS_FACTOR
+    
+    df_copy['wave_height'], _ = zip(*[calculate_wave_height(ws, fetch_km) for ws in wind_speeds])
+    df_copy['year'] = df_copy['datetime'].dt.year
+    yearly_max = df_copy.groupby('year')['wave_height'].max().reset_index()
+    return yearly_max
+
+def extreme_value_analysis(df, fetch_km, use_debiased, data_source):
+    """Perform extreme value analysis using Gumbel distribution"""
+    df_copy = df.copy()
+    wind_speeds = df_copy['speed'].values
+    if use_debiased and data_source != "Demo" and "Raw" in data_source:
+        wind_speeds = wind_speeds * DEBIAS_FACTOR
+    
+    df_copy['wave_height'], _ = zip(*[calculate_wave_height(ws, fetch_km) for ws in wind_speeds])
+    df_copy['year'] = df_copy['datetime'].dt.year
+    yearly_max = df_copy.groupby('year')['wave_height'].max().reset_index()
+    heights = yearly_max['wave_height'].values
+    
+    if len(heights) >= 5:
+        params = stats.gumbel_r.fit(heights)
+        return_periods = [2, 5, 10, 20, 25, 50, 100]
+        return_heights = {}
+        for rp in return_periods:
+            prob = 1 - 1/rp
+            return_heights[rp] = stats.gumbel_r.ppf(prob, *params)
+        
+        max_idx = np.argmax(heights)
+        max_event = {'year': int(yearly_max.iloc[max_idx]['year']), 'height': float(heights[max_idx])}
+        
+        return return_heights, max_event, params
+    else:
+        return None, None, None
+
+def find_highest_wave(data, fetch_km, use_debiased, data_source):
+    """Find the highest wave in 50 years of data"""
+    with st.spinner("🔍 Searching through 50 years of data..."):
+        df = data['df'].copy()
+        wind_speeds = df['speed'].values
+        
+        if use_debiased and data_source != "Demo" and "Raw" in data_source:
+            wind_speeds = wind_speeds * DEBIAS_FACTOR
+        
+        wave_heights, wave_periods = zip(*[calculate_wave_height(ws, fetch_km) for ws in wind_speeds])
+        df['wave_height'] = wave_heights
+        df['wave_period'] = wave_periods
+        
+        max_idx = df['wave_height'].idxmax()
+        max_wave = df.loc[max_idx]
+        top10 = df.nlargest(10, 'wave_height')[['datetime', 'speed', 'wave_height', 'wave_period', 'direction']].copy()
+    
+    st.success(f"🏆 **HIGHEST WAVE IN 50 YEARS: {max_wave['wave_height']:.4f} m ({max_wave['wave_height']*100:.2f} cm)**")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("📅 Date & Time", max_wave['datetime'].strftime('%Y-%m-%d %H:%M'))
+    with col2: st.metric("💨 Wind Speed", f"{max_wave['speed']:.2f} m/s")
+    with col3: st.metric("🌊 Wave Height", f"{max_wave['wave_height']:.3f} m")
+    with col4: st.metric("⏱️ Wave Period", f"{max_wave['wave_period']:.2f} s")
+    
+    st.caption(f"🧭 Wind Direction: {max_wave['direction']:.1f}° ({wind_direction_to_cardinal(max_wave['direction'])})")
+    
+    # Wave distribution at peak
+    st.subheader("📊 Wave Distribution at Peak Hour")
+    
+    wind_speed_max = max_wave['speed']
+    wind_direction_max = max_wave['direction']
+    
+    if use_debiased and data_source != "Demo" and "Raw" in data_source:
+        wind_speed_max = wind_speed_max * DEBIAS_FACTOR
+    
+    wave_heights_grid, wave_periods_grid, _ = generate_swan_wave_distribution(wind_speed_max, wind_direction_max)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        fig_hs = go.Figure(data=go.Heatmap(
+            z=wave_heights_grid * 100, 
+            x=[f"{i*500}m" for i in range(NX)], 
+            y=[f"{i*500}m" for i in range(NY)],
+            colorscale='RdYlGn',
+            text=np.round(wave_heights_grid * 100, 1),
+            texttemplate='<b>%{text} cm</b>',
+            colorbar_title="Wave Height (cm)"
+        ))
+        fig_hs.update_layout(title="Wave Height Distribution", height=400)
+        st.plotly_chart(fig_hs, use_container_width=True)
+    
+    with col2:
+        fig_tp = go.Figure(data=go.Heatmap(
+            z=wave_periods_grid, 
+            x=[f"{i*500}m" for i in range(NX)], 
+            y=[f"{i*500}m" for i in range(NY)],
+            colorscale='Plasma',
+            text=np.round(wave_periods_grid, 1),
+            texttemplate='<b>%{text} s</b>',
+            colorbar_title="Wave Period (s)"
+        ))
+        fig_tp.update_layout(title="Wave Period Distribution", height=400)
+        st.plotly_chart(fig_tp, use_container_width=True)
+    
+    # Top 10 table
+    st.subheader("📊 Top 10 Highest Wave Events")
+    top10_display = top10.copy()
+    top10_display['datetime'] = top10_display['datetime'].dt.strftime('%Y-%m-%d %H:%M')
+    top10_display['wave_height_cm'] = top10_display['wave_height'] * 100
+    top10_display = top10_display[['datetime', 'speed', 'wave_height', 'wave_height_cm', 'wave_period', 'direction']]
+    top10_display.columns = ['Date & Time', 'Wind Speed (m/s)', 'Wave Height (m)', 'Wave Height (cm)', 'Wave Period (s)', 'Direction (°)']
+    st.dataframe(top10_display, use_container_width=True)
+    
+    csv = top10.to_csv(index=False)
+    st.download_button("📥 Download Top 10 Highest Waves", csv, "top10_highest_waves.csv", "text/csv")
+    
+    return max_wave, top10
+
+# ============================================================================
 # Main App
 # ============================================================================
 def main():
@@ -752,66 +932,173 @@ def main():
                     st.success(f"✅ Extracted wind files for {extract_year}")
 
     # ========================================================================
-    # TAB 2: Wind Statistics
+    # TAB 2: Wind Statistics (WITH ALL 5 SUB-TABS)
     # ========================================================================
     with tab2:
-        st.header("💨 Wind Statistics")
+        st.header("💨 General Wind Statistics")
+        
         if not st.session_state.processed:
-            st.info("⚠️ Please load data first (Load Demo Data in sidebar)")
-        else:
-            data = st.session_state.processed_data
-            df = data['df'].copy()
-            if use_debiased and st.session_state.data_source != "Demo" and "Raw" in st.session_state.data_source:
-                df['wind_speed_hourly'] = df['speed'] * DEBIAS_FACTOR
-            
+            st.info("⚠️ Please load data first (Data Acquisition tab)")
+            st.stop()
+        
+        data = st.session_state.processed_data
+        df = data['df'].copy()
+        
+        if use_debiased and st.session_state.data_source != "Demo" and "Raw" in st.session_state.data_source:
+            df['wind_speed_hourly'] = df['speed'] * DEBIAS_FACTOR
+            df['gust_3sec'] = df['gust_3sec'] * DEBIAS_FACTOR
+            df['gust_10sec'] = df['gust_10sec'] * DEBIAS_FACTOR
+            df['wind_speed_3min'] = df['wind_speed_3min'] * DEBIAS_FACTOR
+            df['wind_speed_10min'] = df['wind_speed_10min'] * DEBIAS_FACTOR
+        
+        # Create 5 sub-tabs for Wind Statistics
+        wind_sub1, wind_sub2, wind_sub3, wind_sub4, wind_sub5 = st.tabs([
+            "📊 Wind Rose", "📈 Statistics", "🌅 Diurnal", "⏱️ Wind Averages & Gusts", "🔥 Extremes"
+        ])
+        
+        # SUB-TAB 1: Wind Rose
+        with wind_sub1:
+            if st.button("Generate Wind Rose"):
+                fig = create_wind_rose(data['all_speeds'], data['all_directions'], f"Lake Kariba ({st.session_state.data_source})")
+                st.plotly_chart(fig, use_container_width=True)
+        
+        # SUB-TAB 2: Statistics
+        with wind_sub2:
             col1, col2, col3 = st.columns(3)
-            with col1: st.metric("Mean Wind Speed", f"{np.mean(data['all_speeds']):.2f} m/s")
-            with col2: st.metric("Max Wind Speed", f"{data['global_max']['speed']:.2f} m/s")
-            with col3: mean_dir, _ = calculate_circular_mean(data['all_directions'])
-            st.metric("Mean Direction", f"{mean_dir:.1f}°")
-            
+            with col1:
+                st.metric("Mean Wind Speed", f"{np.mean(data['all_speeds']):.2f} m/s")
+                st.metric("Median Wind Speed", f"{np.median(data['all_speeds']):.2f} m/s")
+            with col2:
+                st.metric("Max Wind Speed", f"{data['global_max']['speed']:.2f} m/s")
+                st.metric("Year of Max", f"{data['global_max']['year']}")
+            with col3:
+                mean_dir, _ = calculate_circular_mean(data['all_directions'])
+                st.metric("Mean Direction", f"{mean_dir:.1f}°")
+                st.metric("Cardinal", wind_direction_to_cardinal(mean_dir))
+        
+        # SUB-TAB 3: Diurnal Pattern
+        with wind_sub3:
             fig = go.Figure()
-            fig.add_trace(go.Histogram(x=data['all_speeds'], nbinsx=30, marker_color='steelblue'))
-            fig.update_layout(title="Wind Speed Distribution", height=400)
+            fig.add_trace(go.Scatter(x=list(range(24)), y=data['diurnal_means'], mode='lines+markers'))
+            fig.update_layout(title="Diurnal Wind Pattern", xaxis_title="Hour", yaxis_title="Wind Speed (m/s)", height=400)
             st.plotly_chart(fig, use_container_width=True)
+        
+        # SUB-TAB 4: Wind Averages & Gusts
+        with wind_sub4:
+            st.subheader("Wind Averaging Periods and Gusts")
+            st.markdown(f"""
+            | Parameter | Factor | Description |
+            |-----------|--------|-------------|
+            | **10-min mean** | ×{GUST_FACTORS['10min']} | Reference wind speed (standard) |
+            | **3-min mean** | ×{GUST_FACTORS['3min']} | Dynamic response for structures |
+            | **10-sec gust** | ×{GUST_FACTORS['10sec']} | Peak gust over 10 seconds |
+            | **3-sec gust** | ×{GUST_FACTORS['3sec']} | Ultimate limit state loads |
+            """)
+            
+            fig = create_wind_parameters_plot(df)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+            
+            st.subheader("Averaging Statistics")
+            stats_df = pd.DataFrame({
+                'Parameter': ['Hourly Mean', '3-min Avg', '10-min Avg', '3-sec Gust', '10-sec Gust'],
+                'Mean (m/s)': [
+                    df['wind_speed_hourly'].mean(),
+                    df['wind_speed_3min'].mean(),
+                    df['wind_speed_10min'].mean(),
+                    df['gust_3sec'].mean(),
+                    df['gust_10sec'].mean()
+                ],
+                'Max (m/s)': [
+                    df['wind_speed_hourly'].max(),
+                    df['wind_speed_3min'].max(),
+                    df['wind_speed_10min'].max(),
+                    df['gust_3sec'].max(),
+                    df['gust_10sec'].max()
+                ],
+                'Gust Factor': [
+                    1.00,
+                    df['wind_speed_3min'].mean() / df['wind_speed_hourly'].mean(),
+                    df['wind_speed_10min'].mean() / df['wind_speed_hourly'].mean(),
+                    df['gust_3sec'].mean() / df['wind_speed_hourly'].mean(),
+                    df['gust_10sec'].mean() / df['wind_speed_hourly'].mean()
+                ]
+            })
+            st.dataframe(stats_df.round(2), use_container_width=True)
+        
+        # SUB-TAB 5: Extremes (Extreme Value Analysis)
+        with wind_sub5:
+            st.subheader("Extreme Value Analysis")
+            if 'yearly_max' in data and data['yearly_max']:
+                years = sorted(data['yearly_max'].keys())
+                values = [data['yearly_max'][y] for y in years]
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=years, y=values, mode='lines+markers'))
+                fig.update_layout(title="Annual Maximum Wind Speeds", xaxis_title="Year", yaxis_title="Wind Speed (m/s)", height=400)
+                st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================================
-    # TAB 3: Wave Analysis
+    # TAB 3: Wave Analysis (JONSWAP)
     # ========================================================================
     with tab3:
-        st.header("🌊 JONSWAP Wave Analysis")
+        st.header("🌊 JONSWAP Generic Wave Parameter Analysis")
+        
         if not st.session_state.processed:
             st.info("⚠️ Please load data first")
-        else:
-            data = st.session_state.processed_data
-            wind_speeds = data['all_speeds'][:5000]
-            if use_debiased and st.session_state.data_source != "Demo" and "Raw" in st.session_state.data_source:
-                wind_speeds = wind_speeds * DEBIAS_FACTOR
-            wave_heights, wave_periods = zip(*[calculate_wave_height(ws, fetch_km) for ws in wind_speeds])
-            
-            col1, col2 = st.columns(2)
-            with col1: st.metric("Mean Wave Height", f"{np.mean(wave_heights):.3f} m")
-            with col2: st.metric("Max Wave Height", f"{np.max(wave_heights):.3f} m")
-            fig = go.Figure()
-            fig.add_trace(go.Histogram(x=wave_heights, nbinsx=30, marker_color='steelblue'))
-            fig.update_layout(title="Wave Height Distribution", height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.stop()
+        
+        data = st.session_state.processed_data
+        
+        wind_speeds = data['all_speeds'][:5000]
+        if use_debiased and st.session_state.data_source != "Demo" and "Raw" in st.session_state.data_source:
+            wind_speeds = wind_speeds * DEBIAS_FACTOR
+        
+        st.markdown(f"**Wave parameters using JONSWAP fetch-limited formula (fetch = {fetch_km} km)**")
+        
+        wave_heights, wave_periods = zip(*[calculate_wave_height(ws, fetch_km) for ws in wind_speeds])
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Mean Wave Height", f"{np.mean(wave_heights):.3f} m")
+        with col2:
+            st.metric("Max Wave Height", f"{np.max(wave_heights):.3f} m")
+        with col3:
+            st.metric("Sig Wave (H₁/₃)", f"{np.percentile(wave_heights, 66.7):.3f} m")
+        with col4:
+            st.metric("Mean Wave Period", f"{np.mean(wave_periods):.2f} s")
+        
+        fig = go.Figure()
+        fig.add_trace(go.Histogram(x=wave_heights, nbinsx=30, marker_color='blue', opacity=0.7))
+        fig.update_layout(title="Wave Height Distribution", xaxis_title="Wave Height (m)", height=400)
+        st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================================
-    # TAB 4: SWAN Model
+    # TAB 4: SWAN Model (WITH ALL 5 SUB-TABS)
     # ========================================================================
     with tab4:
-        st.header("🌊 SWAN Wave Model")
+        st.header("🌊 SWAN Wave Model Analysis")
         if not st.session_state.processed:
             st.info("⚠️ Please load data first")
-        else:
-            data = st.session_state.processed_data
-            df = data['df'].copy()
-            
-            if REAL_BATHYMETRY is not None:
-                fig_bathy = go.Figure(data=go.Heatmap(z=REAL_BATHYMETRY, x=[f"{i*500}m" for i in range(NX)], y=[f"{i*500}m" for i in range(NY)], colorscale='Viridis', text=np.round(REAL_BATHYMETRY, 1), texttemplate='<b>%{text} m</b>'))
-                fig_bathy.update_layout(title="Nyenje Bay Bathymetry", height=450)
-                st.plotly_chart(fig_bathy, use_container_width=True)
+            st.stop()
+        
+        data = st.session_state.processed_data
+        df = data['df'].copy()
+        
+        if REAL_BATHYMETRY is not None:
+            fig_bathy = go.Figure(data=go.Heatmap(z=REAL_BATHYMETRY, x=[f"{i*500}m" for i in range(NX)], y=[f"{i*500}m" for i in range(NY)], colorscale='Viridis', text=np.round(REAL_BATHYMETRY, 1), texttemplate='<b>%{text} m</b>'))
+            fig_bathy.update_layout(title="Nyenje Bay Bathymetry", height=450)
+            st.plotly_chart(fig_bathy, use_container_width=True)
+        
+        # Create 5 sub-tabs for SWAN Model
+        swan_sub1, swan_sub2, swan_sub3, swan_sub4, swan_sub5 = st.tabs([
+            "🎯 Single Analysis", "📅 Monthly Maxima", "📈 Yearly Maxima", 
+            "🏆 Extreme Value Analysis", "🔍 Find Highest Wave"
+        ])
+        
+        # SUB-TAB 1: Single Analysis
+        with swan_sub1:
+            st.subheader("🎯 Single Time Step Wave Analysis")
+            st.markdown("**CONSTANT Bathymetry** + **VARIABLE Wind**")
             
             if 'year' in df.columns:
                 available_years = sorted([y for y in df['year'].unique() if y is not None])
@@ -854,9 +1141,84 @@ def main():
                     with col2: st.metric("Mean Wave Height", f"{np.mean(wave_h):.3f} m ({np.mean(wave_h)*100:.1f} cm)")
             else:
                 st.warning("No valid years found. Please load data first.")
+        
+        # SUB-TAB 2: Monthly Maxima
+        with swan_sub2:
+            st.subheader("📅 Monthly Maximum Wave Heights")
+            if st.button("Calculate Monthly Maxima", key="calc_monthly"):
+                with st.spinner("Calculating monthly maxima..."):
+                    monthly_max, monthly_stats = calculate_monthly_maxima(df, fetch_km, use_debiased, st.session_state.data_source)
+                    
+                    fig1 = go.Figure()
+                    fig1.add_trace(go.Scatter(x=monthly_max['year_month'], y=monthly_max['wave_height'], mode='lines+markers'))
+                    fig1.update_layout(title="Monthly Maximum Wave Heights", height=500, xaxis_tickangle=45)
+                    st.plotly_chart(fig1, use_container_width=True)
+                    
+                    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                    monthly_stats['month_name'] = monthly_stats['month'].apply(lambda x: month_names[x-1])
+                    
+                    fig2 = go.Figure()
+                    fig2.add_trace(go.Bar(x=monthly_stats['month_name'], y=monthly_stats['max'], name='Maximum', marker_color='red'))
+                    fig2.add_trace(go.Bar(x=monthly_stats['month_name'], y=monthly_stats['mean'], name='Mean', marker_color='blue'))
+                    fig2.update_layout(title="Monthly Wave Height Statistics", barmode='group', height=400)
+                    st.plotly_chart(fig2, use_container_width=True)
+                    
+                    csv = monthly_max.to_csv(index=False)
+                    st.download_button("📥 Download Monthly Maxima Data", csv, "monthly_max_waves.csv", "text/csv")
+        
+        # SUB-TAB 3: Yearly Maxima
+        with swan_sub3:
+            st.subheader("📈 Yearly Maximum Wave Heights")
+            if st.button("Calculate Yearly Maxima", key="calc_yearly"):
+                with st.spinner("Calculating yearly maxima..."):
+                    yearly_max = calculate_yearly_maxima(df, fetch_km, use_debiased, st.session_state.data_source)
+                    max_row = yearly_max.loc[yearly_max['wave_height'].idxmax()]
+                    
+                    fig = go.Figure()
+                    colors = ['red' if y == max_row['year'] else 'steelblue' for y in yearly_max['year']]
+                    fig.add_trace(go.Bar(x=yearly_max['year'], y=yearly_max['wave_height'], marker_color=colors, text=yearly_max['wave_height'].round(3), textposition='outside'))
+                    fig.add_annotation(x=max_row['year'], y=max_row['wave_height'], text=f"🏆 Max: {max_row['wave_height']:.3f}m", showarrow=True, arrowcolor="red")
+                    fig.update_layout(title="Yearly Maximum Wave Heights", height=500)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    st.success(f"🏆 Year {max_row['year']} had the highest wave: {max_row['wave_height']:.3f} m")
+                    csv = yearly_max.to_csv(index=False)
+                    st.download_button("📥 Download Yearly Maxima Data", csv, "yearly_max_waves.csv", "text/csv")
+        
+        # SUB-TAB 4: Extreme Value Analysis
+        with swan_sub4:
+            st.subheader("🏆 Extreme Value Analysis (50-100 Year Return Period)")
+            if st.button("Run Extreme Value Analysis", key="calc_extreme"):
+                if not SCIPY_AVAILABLE:
+                    st.error("scipy not installed. Run: pip install scipy")
+                else:
+                    with st.spinner("Performing extreme value analysis..."):
+                        return_heights, max_event, params = extreme_value_analysis(df, fetch_km, use_debiased, st.session_state.data_source)
+                        
+                        if return_heights:
+                            return_df = pd.DataFrame([{'Return Period (years)': rp, 'Wave Height (m)': round(h, 3)} for rp, h in return_heights.items()])
+                            st.dataframe(return_df, use_container_width=True)
+                            
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatter(x=list(return_heights.keys()), y=list(return_heights.values()), mode='lines+markers'))
+                            fig.update_layout(title="Return Period Wave Heights", xaxis_title="Return Period (years)", xaxis_type="log", height=450)
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            hs_50 = return_heights[50]
+                            hs_100 = return_heights[100]
+                            st.info(f"**50-year wave:** {hs_50:.3f} m | **100-year wave:** {hs_100:.3f} m")
+                        else:
+                            st.warning("Insufficient data for extreme value analysis (need at least 5 years)")
+        
+        # SUB-TAB 5: Find Highest Wave
+        with swan_sub5:
+            st.subheader("🔍 Find the Highest Wave in 50 Years")
+            st.markdown("This tool searches through all 50 years of data to find the exact hour when the highest wave occurred.")
+            if st.button("🔍 Find Highest Wave Event", type="primary"):
+                find_highest_wave(data, fetch_km, use_debiased, st.session_state.data_source)
 
-   # ========================================================================
-    # TAB 5: LIVE VALIDATION - CORRECTED with r = 0.502 (NO HTML ERRORS)
+    # ========================================================================
+    # TAB 5: LIVE VALIDATION
     # ========================================================================
     with tab5:
         st.header("✅ Live Validation: ERA5 Debiased vs Kariba Airport")
@@ -877,7 +1239,6 @@ def main():
                 st.dataframe(airport_df.head(10), use_container_width=True)
                 st.caption(f"Data source: {AIRPORT_DATA_FILE}")
             
-            # Location context using st.info and st.markdown properly
             st.info("""
             **📍 Location Context:**  
             - **Kariba Airport:** 16.52°S, 28.88°E | Elevation ~500m | Grass/Runway surface | Exposed  
@@ -904,7 +1265,6 @@ def main():
                 if validation_results:
                     st.session_state.validation_results = validation_results
                     
-                    # Show expected vs actual correlation using columns
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.metric("Expected Correlation", f"{validation_results['target_corr']:.3f}")
@@ -916,7 +1276,6 @@ def main():
                     with col3:
                         st.metric("Bias Improvement", f"{validation_results['bias_improvement']:.0f}%")
                     
-                    # Create a nice correlation box with st.success
                     st.success(f"""
                     **📊 Debiased ERA5 vs Airport: r = {validation_results['debiased_corr']:.3f}**
                     
@@ -967,10 +1326,7 @@ def main():
                                             height=500)
                     st.plotly_chart(fig_scatter, use_container_width=True)
                     
-                    # Local effects explanation - Using proper st.markdown with separate sections
                     st.subheader("🌍 Why This Correlation is Expected")
-                    
-                    # Create a simple table using st.markdown with proper formatting
                     st.markdown("""
                     **Factors Affecting Correlation:**
                     
@@ -982,7 +1338,6 @@ def main():
                     | Fetch limitation | Reduces high winds | Bay has 4 km max fetch vs. unlimited |
                     """)
                     
-                    # Display key findings using st.info and st.success
                     st.info(f"""
                     **Key Findings:**
                     - Debiasing reduced bias from **{validation_results['raw_bias']:+.2f} m/s** to **{validation_results['debiased_bias']:+.2f} m/s**
@@ -995,11 +1350,11 @@ def main():
                     progress_bar.progress(100)
                     status_text.text("✅ Validation complete!")
                     st.balloons()
-                    
                 else:
                     st.error("Validation failed. Please check data files.")
         else:
             st.error(f"❌ Airport data file not found at: {AIRPORT_DATA_FILE}")
             st.info("Please ensure the file exists at the correct path with columns: Year, Month, Day, Wind_direction, Wind Speed (Knots)")
+
 if __name__ == "__main__":
     main()

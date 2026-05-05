@@ -1,0 +1,130 @@
+
+ SWAN is preparing computation
+
+ iteration    1; sweep 1
++iteration    1; sweep 2
++iteration    1; sweep 3
++iteration    1; sweep 4
+ not possible to compute, first iteration
+
+ iteration    2; sweep 1
++iteration    2; sweep 2
++iteration    2; sweep 3
++iteration    2; sweep 4
+ accuracy OK in   6.95 % of wet grid points ( 99.50 % required)
+
+ iteration    3; sweep 1
++iteration    3; sweep 2
++iteration    3; sweep 3
++iteration    3; sweep 4
+ accuracy OK in  12.50 % of wet grid points ( 99.50 % required)
+
+ iteration    4; sweep 1
++iteration    4; sweep 2
++iteration    4; sweep 3
++iteration    4; sweep 4
+ accuracy OK in  13.89 % of wet grid points ( 99.50 % required)
+
+ iteration    5; sweep 1
++iteration    5; sweep 2
++iteration    5; sweep 3
++iteration    5; sweep 4
+ accuracy OK in  13.89 % of wet grid points ( 99.50 % required)
+
+ iteration    6; sweep 1
++iteration    6; sweep 2
++iteration    6; sweep 3
++iteration    6; sweep 4
+ accuracy OK in  13.89 % of wet grid points ( 99.50 % required)
+
+ iteration    7; sweep 1
++iteration    7; sweep 2
++iteration    7; sweep 3
++iteration    7; sweep 4
+ accuracy OK in  13.89 % of wet grid points ( 99.50 % required)
+
+ iteration    8; sweep 1
++iteration    8; sweep 2
++iteration    8; sweep 3
++iteration    8; sweep 4
+ accuracy OK in  13.89 % of wet grid points ( 99.50 % required)
+
+ iteration    9; sweep 1
++iteration    9; sweep 2
++iteration    9; sweep 3
++iteration    9; sweep 4
+ accuracy OK in  30.56 % of wet grid points ( 99.50 % required)
+
+ iteration   10; sweep 1
++iteration   10; sweep 2
++iteration   10; sweep 3
++iteration   10; sweep 4
+ accuracy OK in  58.34 % of wet grid points ( 99.50 % required)
+
+ iteration   11; sweep 1
++iteration   11; sweep 2
++iteration   11; sweep 3
++iteration   11; sweep 4
+ accuracy OK in  56.95 % of wet grid points ( 99.50 % required)
+
+ iteration   12; sweep 1
++iteration   12; sweep 2
++iteration   12; sweep 3
++iteration   12; sweep 4
+ accuracy OK in  54.17 % of wet grid points ( 99.50 % required)
+
+ iteration   13; sweep 1
++iteration   13; sweep 2
++iteration   13; sweep 3
++iteration   13; sweep 4
+ accuracy OK in  48.62 % of wet grid points ( 99.50 % required)
+
+ iteration   14; sweep 1
++iteration   14; sweep 2
++iteration   14; sweep 3
++iteration   14; sweep 4
+ accuracy OK in  47.23 % of wet grid points ( 99.50 % required)
+
+ iteration   15; sweep 1
++iteration   15; sweep 2
++iteration   15; sweep 3
++iteration   15; sweep 4
+ accuracy OK in  43.06 % of wet grid points ( 99.50 % required)
+
+ iteration   16; sweep 1
++iteration   16; sweep 2
++iteration   16; sweep 3
++iteration   16; sweep 4
+ accuracy OK in  44.45 % of wet grid points ( 99.50 % required)
+
+ iteration   17; sweep 1
++iteration   17; sweep 2
++iteration   17; sweep 3
++iteration   17; sweep 4
+ accuracy OK in  40.28 % of wet grid points ( 99.50 % required)
+
+ iteration   18; sweep 1
++iteration   18; sweep 2
++iteration   18; sweep 3
++iteration   18; sweep 4
+ accuracy OK in  50.00 % of wet grid points ( 99.50 % required)
+
+ iteration   19; sweep 1
++iteration   19; sweep 2
++iteration   19; sweep 3
++iteration   19; sweep 4
+ accuracy OK in  56.95 % of wet grid points ( 99.50 % required)
+
+ iteration   20; sweep 1
++iteration   20; sweep 2
++iteration   20; sweep 3
++iteration   20; sweep 4
+ accuracy OK in  77.78 % of wet grid points ( 99.50 % required)
+
+ iteration   21; sweep 1
++iteration   21; sweep 2
++iteration   21; sweep 3
++iteration   21; sweep 4
+ accuracy OK in 100.00 % of wet grid points ( 99.50 % required)
+
++SWAN is processing output request    1

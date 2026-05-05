@@ -1,0 +1,60 @@
+﻿chawas@chawas-HP-OmniBook-5-Flip-Laptop-14-fp0xxx:~/deployed/charara_github/swan4151/bin$ # Create directory for ERA5 debiased wind files
+mkdir -p nyenje_era5_debiased
+
+# Create Python script to extract first time step
+cat > extract_era5_first_hour.py << 'EOF'
+#!/usr/bin/env python3
+"""
+Extract first hour (2020-01-01 00:00) from ERA5 debiased data
+Create SWAN wind file for Nyenje Bay (9×8 grid)
+"""
+
+import numpy as np
+import xarray as xr
+import pandas as pd
+import os
+from datetime import datetime
+
+# Configuration
+NX = 9   # points in X (West-East)
+NY = 8   # points in Y (South-North)
+DOMAIN_X = 4000.0
+DOMAIN_Y = 3500.0
+CENTER_LAT = -16.53
+CENTER_LON = 28.83
+DEBIAS_FACTOR = 0.718
+
+# Input ERA5 file (adjust path as needed)
+ERA5_FILE = "/home/chawas/deployed/charara_github/data/era5/debiased/era5_kariba_2020_01_corrected.nc"
+
+# Output directory
+OUTPUT_DIR = "nyenje_era5_debiased"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def create_grid():
+    """Create 9×8 grid coordinates"""
+    x_coords = np.linspace(0, DOMAIN_X, NX)
+    y_coords = np.linspace(0, DOMAIN_Y, NY)
+    X, Y = np.meshgrid(x_coords, y_coords)
+python3 extract_era5_first_hour.py)):e}")output_file)ind_{time_str}.wnd")rid, lat_grid, time_index=0)
+============================================================
+Extracting ERA5 Debiased Wind for Nyenje Bay
+============================================================
+Grid: 9×8 = 72 points
+
+Reading: era5_kariba_2020_01_corrected.nc
+Time: 2020-01-01 00:00:00
+U shape: (8, 9)
+V shape: (8, 9)
+
+Wind Statistics:
+  Speed - Min: 2.75 m/s
+  Speed - Max: 2.87 m/s
+  Speed - Mean: 2.81 m/s
+
+✅ Created: nyenje_era5_debiased/nyenje_wind_20200101_0000.wnd
+
+First row preview:
+  -2.714   -0.662   -2.723   -0.666   -2.731   -0.669   -2.740   -0.673   -2.749  ...
+(deploy_env) chawas@chawas-HP-OmniBook-5-Flip-Laptop-14-fp0xxx:~/deployed/charara_github/swan4151/bin$ 
+

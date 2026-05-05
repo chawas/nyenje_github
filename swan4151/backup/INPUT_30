@@ -1,0 +1,52 @@
+!===============================================================================
+! SWAN MODEL FOR LAKE KARIBA - NYENJE AREA
+! Domain: 4.0 km (E-W) × 3.5 km (N-S)
+! Grid: 8 cells × 7 cells (9 points × 8 points)
+! Resolution: 500 m
+! Wind: 10 m/s from 090° (East wind)
+!===============================================================================
+
+PROJECT 'Kariba_4x3p5' '002' 'Lake Kariba 4x3.5km simulation' ' ' ' '
+
+SET level=0.0 nor=90.0 depmin=0.05 maxmes=200 maxerr=1 grav=9.81 rho=1000
+SET cdcap=0.0025 inrhog=0 NAUTICAL pwtail=5
+
+MODE STATIONARY TWODIMENSIONAL
+
+COORDINATES CARTESIAN
+
+! Grid: X=0 to 4000 m (8 cells), Y=0 to 3500 m (7 cells)
+CGRID REGULAR 0.0 0.0 0.0 4000.0 3500.0 8 7 CIRCLE 36 0.04 1.00 25
+
+! Bathymetry input
+INPGRID BOTTOM REGULAR 0.0 0.0 0.0 8 7 500.0 500.0
+READINP BOTTOM 1.0 'kariba_bathy_4x3p5.dep' 1 0 FREE
+
+! Constant wind
+WIND 10.0 90.0
+
+! Physics
+GEN3 KOMEN 2.36E-5 3.02E-3
+FRICTION JONSWAP CONSTANT 0.038
+BREAKING CONSTANT 1.0 0.73
+
+NUMERIC STAT 50 0.01
+
+! Output frame matching computational grid
+FRAME 'fullgrid' 0.0 0.0 0.0 4000.0 3500.0 8 7
+
+! Key output points
+POINTS 'center' 2000.0 1750.0
+POINTS 'deep_spot' 500.0 500.0
+POINTS 'shallow_east' 3500.0 1750.0
+
+QUANTITY HSIGN DEPTH TM01 DIR
+
+BLOCK 'fullgrid' HEADER 'hs_4x3p5.block' LAY-OUT 4 HSIGN
+BLOCK 'fullgrid' HEADER 'depth_4x3p5.block' LAY-OUT 4 DEPTH
+
+TABLE 'center' HEADER 'center_4x3p5.tab' HSIGN TM01 DIR DEPTH
+
+COMPUTE
+
+STOP

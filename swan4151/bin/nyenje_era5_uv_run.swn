@@ -1,0 +1,36 @@
+!===============================================================================
+! SWAN INPUT FILE FOR NYENJE BAY - WITH ERA5 U/V WIND
+! Created: 2026-04-08 22:49:58
+!===============================================================================
+
+PROJECT 'Nyenje' 'ERA5' 'Wave simulation with ERA5 wind (U/V components)' ' ' ' '
+
+MODE STATIONARY TWODIMENSIONAL
+
+COORDINATES CARTESIAN
+
+! Computational grid: 4 km × 3.5 km, 500m resolution
+CGRID REGULAR 0.0 0.0 0.0 4000.0 3500.0 8 7 CIRCLE 36 0.04 1.00 25
+
+! Bathymetry
+INPGRID BOTTOM REGULAR 0.0 0.0 0.0 8 7 500.0 500.0
+READINP BOTTOM 1.0 'nyenje_bathymetry_8x7.bot' 1 0 FREE
+
+! Wind from ERA5 - U/V components
+INPGRID WIND REGULAR 0.0 0.0 0.0 8 7 500.0 500.0
+READINP WIND 1.0 'nyenje_era5_uv.wnd' 1 0 FREE
+
+! Physics
+GEN3 KOMEN 2.36E-5 3.02E-3
+FRICTION JONSWAP CONSTANT 0.038
+BREAKING CONSTANT 1.0 0.73
+
+! Numerics
+NUMERIC STOPC 0.02 0.01 0.001 98 STAT 50 0.01
+
+! Output
+BLOCK 'COMPGRID' NOHEADER 'nyenje_wave_output.txt' LAYOUT 4 HSIGN TM01 DIR
+
+COMPUTE
+
+STOP

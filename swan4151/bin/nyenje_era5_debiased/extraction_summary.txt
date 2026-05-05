@@ -1,0 +1,4 @@
+Extraction completed: 2026-04-16 21:31:51.032751
+Years: 1971-2020
+Total time steps: 297216
+Output directory: ./nyenje_era5_debiased/

@@ -1,0 +1,42 @@
+! ==============================
+! SWAN 41.51 Input File: Nyenje
+! ==============================
+
+PROJECT 'Nyenje' 'Test'
+
+MODE STATIONARY
+
+! ---------------------------
+! Model vertical setup
+SET LEVEL 485.0
+SET DEPMIN 0.01
+
+! Define vertical sigma layers BEFORE any grid inputs
+MSC 20           ! Number of vertical layers (fix MDC error)
+
+! ---------------------------
+! Computational grid
+CGRID REGULAR 28.919616 -16.698956 0 0.01035577 0.01024969 8 7
+
+! ---------------------------
+! Bathymetry input
+INPGRID BOTTOM REGULAR 28.919616 -16.698956 0 8 7 0.01035577 0.01024969
+READINP BOTTOM 1 'nyenje_depth.bot'
+
+! ---------------------------
+! Wind input
+INPGRID WIND REGULAR 28.919616 -16.698956 0 8 7 0.01035577 0.01024969
+READINP WIND 1 'nyenje_wind_8x7_2.wnd'
+
+! ---------------------------
+! Output options
+GEN3 KOMEN
+WCAP KOMEN
+QUAD OFF
+
+NUM ACCUR 0.02
+
+! Output table
+BLOCK 'COMPGRID' NOHEAD 'output.tbl' LAY 1 HSIGN DIR TPS
+
+! End of input

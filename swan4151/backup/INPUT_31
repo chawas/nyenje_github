@@ -1,0 +1,39 @@
+!===============================================================================
+! MINIMAL WORKING SWAN INPUT
+!===============================================================================
+
+PROJECT 'Test' '001' 'Minimal test' ' ' ' '
+
+MODE STATIONARY TWODIMENSIONAL
+
+COORDINATES CARTESIAN
+
+! Grid: 4000m x 3500m, 8x7 cells, 36 directions, 0.04-1.00 Hz, 25 frequencies
+CGRID REGULAR 0.0 0.0 0.0 4000.0 3500.0 8 7 CIRCLE 36 0.04 1.00 25
+
+! Bathymetry
+INPGRID BOTTOM REGULAR 0.0 0.0 0.0 8 7 500.0 500.0
+READINP BOTTOM 1.0 'test_depth.bot' 1 0 FREE
+
+! Wind
+WIND 10.0 90.0
+
+! Physics - Third generation
+GEN3 KOMEN 2.36E-5 3.02E-3
+
+! Bottom friction
+FRICTION JONSWAP CONSTANT 0.038
+
+! Breaking
+BREAKING CONSTANT 1.0 0.73
+
+! Numerics - Correct syntax!
+! NUMERIC STOPC [dabs] [drel] [curvat] [npnts] STAT [mxitst] [alfa]
+NUMERIC STOPC 0.02 0.01 0.001 98 STAT 50 0.01
+
+! Output
+BLOCK 'COMPGRID' NOHEADER 'test_out.txt' LAYOUT 3 HSIGN
+
+COMPUTE
+
+STOP
