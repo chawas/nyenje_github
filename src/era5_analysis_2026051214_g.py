@@ -768,82 +768,6 @@ def find_highest_wave(data, fetch_km, use_debiased, data_source):
     return max_wave, top10
 
 # ============================================================================
-# PDF VIEWER FUNCTIONS
-# ============================================================================
-
-def display_pdf_simple(pdf_path):
-    """Simple PDF viewer with embedded iframe"""
-    if os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as f:
-            pdf_data = f.read()
-        
-        # Display PDF using base64 embedding
-        base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
-        st.markdown(pdf_display, unsafe_allow_html=True)
-        
-        # Add download button
-        st.download_button(
-            label="📥 Download PDF",
-            data=pdf_data,
-            file_name=os.path.basename(pdf_path),
-            mime="application/pdf"
-        )
-    else:
-        st.error(f"PDF not found: {pdf_path}")
-
-def display_pdf_with_controls(pdf_path):
-    """Display PDF with metadata and controls"""
-    if not os.path.exists(pdf_path):
-        st.error(f"PDF not found: {pdf_path}")
-        return
-    
-    # Show file info
-    file_size = os.path.getsize(pdf_path) / 1024  # KB
-    st.caption(f"📄 File: {os.path.basename(pdf_path)} | Size: {file_size:.1f} KB")
-    
-    # Display PDF
-    with open(pdf_path, "rb") as f:
-        pdf_data = f.read()
-    
-    base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="550" type="application/pdf"></iframe>'
-    st.markdown(pdf_display, unsafe_allow_html=True)
-    
-    # Download button
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button(
-            label="📥 Download PDF",
-            data=pdf_data,
-            file_name=os.path.basename(pdf_path),
-            mime="application/pdf"
-        )
-    with col2:
-        # Open in new tab button
-        st.markdown(f'<a href="data:application/pdf;base64,{base64_pdf}" target="_blank"><button style="background-color: #4CAF50; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">🔗 Open in New Tab</button></a>', unsafe_allow_html=True)
-
-def get_pdf_info(pdf_path):
-    """Extract PDF metadata (if PyPDF2 is available)"""
-    try:
-        import PyPDF2
-        with open(pdf_path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
-            info = {
-                'pages': len(reader.pages),
-                'metadata': dict(reader.metadata) if reader.metadata else {}
-            }
-        return info
-    except:
-        return None
-
-def list_pdfs_in_directory(directory):
-    """Return list of PDF files in directory"""
-    if not os.path.exists(directory):
-        return []
-    return glob.glob(os.path.join(directory, "*.pdf"))
-
-# ============================================================================
 # Main App
 # ============================================================================
 def main():
@@ -929,12 +853,12 @@ def main():
     st.info("💡 **Key Concept:** Bathymetry is **CONSTANT**. Wind files are **VARIABLE**. SWAN INPUT files are **DYNAMIC**.")
 
     # Tabs
-    # Add to your tabs declaration (add tab7)
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "📥 Data Acquisition", "💨 Wind Statistics", 
-    "🌊 Wave Analysis (JONSWAP)", "🌊 SWAN Model", 
-    "✅ Live Validation", "📍 Nyenje Bay Gallery", "📄 Documents"
-])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📥 Data Acquisition", "💨 Wind Statistics", 
+        "🌊 Wave Analysis (JONSWAP)", "🌊 SWAN Model", 
+        "✅ Live Validation", "📍 Nyenje Bay Gallery"
+    ])
+
     # ========================================================================
     # TAB 1: Data Acquisition (WITH PROGRESS BAR)
     # ========================================================================
@@ -1036,123 +960,78 @@ def main():
                     elif not files:
                         st.error(f"❌ No supported files found in {use_dir}")
                     else:
-                        # Create a placeholder for dynamic updates
-                        progress_placeholder = st.empty()
-                        status_placeholder = st.empty()
-                        file_placeholder = st.empty()
-                        time_placeholder = st.empty()
+                        # Create placeholders for progress display
+                        progress_bar = st.progress(0, text="Starting...")
+                        status_text = st.empty()
+                        file_text = st.empty()
+                        time_text = st.empty()
                         
-                        # Initialize
-                        all_results = []
-                        total_files = len(files)
+                        # Track start time
                         start_time = datetime.now()
+                        total_files = len(files)
                         
-                        # Show initial progress bar
-                        progress_bar = progress_placeholder.progress(0)
-                        status_placeholder.info(f"📊 Processing {total_files} files...")
+                        # Define the callback function
+                        def update_progress(current, total, filename):
+                            percent = (current / total) * 100
+                            progress_bar.progress(percent / 100, text=f"Processing: {current}/{total} files ({percent:.1f}%)")
+                            file_text.info(f"📄 Current file: **{filename}**")
+                            
+                            # Calculate estimated time remaining
+                            elapsed = (datetime.now() - start_time).total_seconds()
+                            if current > 0 and elapsed > 0:
+                                avg_time_per_file = elapsed / current
+                                remaining = avg_time_per_file * (total - current)
+                                time_text.info(f"⏱️ Estimated time remaining: {remaining/60:.1f} minutes")
                         
-                        # Process each file with forced UI updates
-                        for i, file_path in enumerate(files):
-                            filename = os.path.basename(file_path)
-                            percent = ((i + 1) / total_files) * 100
+                        try:
+                            # Process files with progress callback
+                            result = process_all_files(use_dir, NYENJE_CENTER_LAT, NYENJE_CENTER_LON, update_progress)
                             
-                            # Update progress bar
-                            progress_bar.progress((i + 1) / total_files)
+                            # Clear progress indicators
+                            progress_bar.progress(1.0, text="✅ Complete!")
+                            status_text.success(f"✅ Successfully processed data!")
+                            file_text.empty()
+                            time_text.empty()
                             
-                            # Update file status
-                            file_placeholder.info(f"📄 Processing: **{filename}** ({i+1}/{total_files})")
-                            
-                            # Show estimated time
-                            if i > 0:
-                                elapsed = (datetime.now() - start_time).total_seconds()
-                                avg_time = elapsed / i
-                                remaining = avg_time * (total_files - i)
-                                time_placeholder.caption(f"⏱️ Estimated remaining: {remaining/60:.1f} minutes | ⏱️ Elapsed: {elapsed/60:.1f} min")
-                            
-                            # Force Streamlit to update (critical!)
-                            import time
-                            time.sleep(0.01)  # Tiny pause to allow UI update
-                            
-                            # Process the file
-                            results = extract_wind_from_file(file_path, NYENJE_CENTER_LAT, NYENJE_CENTER_LON)
-                            if results:
-                                all_results.extend(results)
-                        
-                        # Clear placeholders
-                        progress_placeholder.empty()
-                        status_placeholder.empty()
-                        file_placeholder.empty()
-                        time_placeholder.empty()
-                        
-                        if not all_results:
-                            st.error("❌ No data could be extracted from the files")
-                        else:
-                            # Convert to DataFrame (same as before)
-                            df = pd.DataFrame(all_results)
-                            df['datetime'] = pd.to_datetime(df['time'])
-                            df = df.sort_values('datetime').reset_index(drop=True)
-                            df['hour'] = df['datetime'].dt.hour
-                            df['year'] = df['datetime'].dt.year
-                            df['month'] = df['datetime'].dt.month
-                            df['day'] = df['datetime'].dt.day
-                            
-                            # Calculate wind averages
-                            wind_avg = calculate_wind_averages(df['speed'].values, df['datetime'])
-                            df['wind_speed_3min'] = wind_avg['wind_3min']
-                            df['wind_speed_10min'] = wind_avg['wind_10min']
-                            df['gust_3sec'] = wind_avg['gust_3sec']
-                            df['gust_10sec'] = wind_avg['gust_10sec']
-                            df['wind_speed_hourly'] = df['speed']
-                            df['wind_direction'] = df['direction']
-                            
-                            # Calculate statistics
-                            diurnal_means = df.groupby('hour')['speed'].mean().reindex(range(24), fill_value=0).tolist()
-                            yearly_max = df.groupby('year')['speed'].max().to_dict()
-                            global_max_speed = df['speed'].max()
-                            global_max_year = df.loc[df['speed'].idxmax(), 'year'] if not df.empty else None
-                            
-                            # Create result dictionary
-                            result = {
-                                'df': df,
-                                'all_speeds': df['speed'].values,
-                                'all_directions': df['direction'].values,
-                                'all_times': df['datetime'].values,
-                                'diurnal_means': diurnal_means,
-                                'yearly_max': yearly_max,
-                                'global_max': {'speed': global_max_speed, 'year': global_max_year},
-                                'total_records': len(df),
-                                'years': sorted(df['year'].unique()),
-                            }
-                            
-                            # Store in session state
-                            st.session_state.processed_data = result
-                            st.session_state.processed = True
-                            st.session_state.data_source = source_name
-                            
-                            total_time = (datetime.now() - start_time).total_seconds()
-                            
-                            # Display summary
-                            st.markdown("---")
-                            st.markdown("### 📊 Processing Summary")
-                            
-                            col_a, col_b, col_c, col_d = st.columns(4)
-                            with col_a:
-                                st.metric("📁 Files Processed", f"{len(files)}/{len(files)}")
-                            with col_b:
-                                st.metric("📅 Total Records", f"{result['total_records']:,}")
-                            with col_c:
-                                st.metric("📆 Years Range", f"{result['years'][0]} - {result['years'][-1]}")
-                            with col_d:
-                                st.metric("💨 Max Wind", f"{result['global_max']['speed']:.2f} m/s")
-                            
-                            # Show data quality metrics
-                            mean_dir, strength = calculate_circular_mean(result['all_directions'])
-                            st.success(f"✅ **Data Summary:** Mean wind speed: {np.mean(result['all_speeds']):.2f} m/s | Mean direction: {mean_dir:.1f}° ({wind_direction_to_cardinal(mean_dir)})")
-                            st.info(f"⏱️ Total processing time: {total_time:.1f} seconds")
-                            
-                            if "Debiased" in source_name:
-                                st.balloons()
-                                st.success("🎉 **Using DEBIASED ERA5 - NE prevailing direction expected**")
+                            if result and result['total_records'] > 0:
+                                # Store in session state
+                                st.session_state.processed_data = result
+                                st.session_state.processed = True
+                                st.session_state.data_source = source_name
+                                
+                                # Display summary
+                                st.markdown("---")
+                                st.markdown("### 📊 Processing Summary")
+                                
+                                col_a, col_b, col_c, col_d = st.columns(4)
+                                with col_a:
+                                    st.metric("📁 Files Processed", f"{len(files)}/{len(files)}")
+                                with col_b:
+                                    st.metric("📅 Total Records", f"{result['total_records']:,}")
+                                with col_c:
+                                    st.metric("📆 Years Range", f"{result['years'][0]} - {result['years'][-1]}")
+                                with col_d:
+                                    st.metric("💨 Max Wind", f"{result['global_max']['speed']:.2f} m/s")
+                                
+                                # Show data quality metrics
+                                mean_dir, strength = calculate_circular_mean(result['all_directions'])
+                                st.success(f"✅ **Data Summary:** Mean wind speed: {np.mean(result['all_speeds']):.2f} m/s | Mean direction: {mean_dir:.1f}° ({wind_direction_to_cardinal(mean_dir)})")
+                                
+                                if "Debiased" in source_name:
+                                    st.balloons()
+                                    st.success("🎉 **Using DEBIASED ERA5 - NE prevailing direction expected**")
+                                
+                                # Show total processing time
+                                total_time = (datetime.now() - start_time).total_seconds()
+                                st.info(f"⏱️ Total processing time: {total_time:.1f} seconds")
+                                
+                            else:
+                                st.error("❌ No data could be processed. Please check file formats.")
+                                
+                        except Exception as e:
+                            progress_bar.progress(1.0, text="❌ Error!")
+                            st.error(f"❌ Error during processing: {str(e)}")
+                            st.info("💡 Try using Demo Data to test the interface, then check your file formats.")
         with sub5:
             st.markdown("### 🌊 Extract SWAN Wind Files")
             extract_year = st.selectbox("Select Year", list(range(1971, 2021)), index=49)
@@ -1606,87 +1485,29 @@ def main():
         with gallery_tab1:
             st.subheader("📸 Nyenje Bay Photographs")
             
-            # Add file uploader for users to upload their own photos
-            with st.expander("📤 Upload Your Own Photos", expanded=False):
-                uploaded_photos = st.file_uploader(
-                    "Choose photos of Nyenje Bay",
-                    type=['jpg', 'jpeg', 'png', 'gif'],
-                    accept_multiple_files=True,
-                    key="photo_uploader"
-                )
-                
-                if uploaded_photos:
-                    st.success(f"✅ {len(uploaded_photos)} photos uploaded")
-                    for photo in uploaded_photos:
-                        st.image(photo, caption=photo.name, use_container_width=True)
-            
-            # Define possible image paths (local files)
-            st.markdown("---")
-            st.markdown("### 📁 Local Site Photos")
-            
-            image_dirs = [
-                os.path.join(BASE_DIR, "docs", "images"),
-                os.path.join(BASE_DIR, "docs", "images", "nyenje"),
-                os.path.join(BASE_DIR, "data", "images"),
-                os.path.join(BASE_DIR, "photos"),
+            # Define possible image paths
+            image_paths = [
+                os.path.join(BASE_DIR, "docs", "images", "nyenje_bay.jpg"),
+                os.path.join(BASE_DIR, "docs", "images", "nyenje", "overview.jpg"),
+                os.path.join(BASE_DIR, "data", "images", "nyenje_bay.png"),
+                os.path.join(BASE_DIR, "nyenje_bay.jpg"),
             ]
             
-            # Collect all images from directories
-            all_images = []
-            for img_dir in image_dirs:
-                if os.path.exists(img_dir):
-                    for ext in ['*.jpg', '*.jpeg', '*.png', '*.gif']:
-                        all_images.extend(glob.glob(os.path.join(img_dir, ext)))
+            image_found = False
+            for img_path in image_paths:
+                if os.path.exists(img_path):
+                    st.image(img_path, caption="Nyenje Bay, Lake Kariba", use_container_width=True)
+                    image_found = True
+                    break
             
-            if all_images:
-                # Add a button to browse and select images
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if st.button("🖼️ Show All Local Photos", use_container_width=True):
-                        st.session_state.show_all_photos = True
-                with col_btn2:
-                    if st.button("📁 Browse Photo Directory", use_container_width=True):
-                        st.session_state.browse_photos = True
-                
-                # Display photos in a grid
-                if st.session_state.get('show_all_photos', False):
-                    st.markdown("### 🖼️ Photo Gallery")
-                    
-                    # Display in 3 columns
-                    cols = st.columns(3)
-                    for idx, img_path in enumerate(all_images):
-                        with cols[idx % 3]:
-                            st.image(img_path, caption=os.path.basename(img_path), use_container_width=True)
-                            # Add download button for each image
-                            with open(img_path, "rb") as f:
-                                st.download_button(
-                                    label=f"📥 Download",
-                                    data=f.read(),
-                                    file_name=os.path.basename(img_path),
-                                    mime="image/jpeg",
-                                    key=f"download_{idx}"
-                                )
-                
-                # Browse directory
-                if st.session_state.get('browse_photos', False):
-                    st.markdown("### 📁 Photo Directory Browser")
-                    for img_dir in image_dirs:
-                        if os.path.exists(img_dir):
-                            st.code(f"📂 {img_dir}")
-                            for f in os.listdir(img_dir)[:10]:
-                                if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                                    st.text(f"  📷 {f}")
-            else:
+            if not image_found:
                 st.info("""
                 ### 📸 Add Site Photos
                 
-                **Ways to add photos:**
-                1. **Upload above** - Use the file uploader to add photos temporarily
-                2. **Add to folder** - Place images in one of these folders:
-                   - `docs/images/nyenje/`
-                   - `data/images/`
-                   - `photos/`
-                3. **Browse** - Use the buttons above to browse available photos
+                **To add images to this gallery:**
+                1. Place image files in: `docs/images/nyenje/`
+                2. Supported formats: JPG, PNG, JPEG
+                3. Refresh the page after adding
                 
                 **Recommended images:**
                 - Aerial/satellite view of Nyenje Bay
@@ -1707,9 +1528,10 @@ def main():
                 | **Water Body** | Lake Kariba (world's largest man-made lake) |
                 | **Domain Size** | 4.0 km × 3.5 km |
                 | **Grid Resolution** | 9 × 8 points (500 m spacing) |
-                | **Fetch Length** | 4 km (West direction - open lake) |
+                | **Fetch Length** | 4 km (NE direction) |
                 | **Water Depth** | 1.5 m (shallow) to 30 m (deep) |
                 """)
+        
         with gallery_tab2:
             st.subheader("🗺️ Nyenje Bay Location Map")
             
@@ -1882,123 +1704,6 @@ def main():
             ax.set_aspect('equal')
             
             st.pyplot(fig)
-            
-            
-            
-
-
-    # Add this after tab6
-    with tab7:
-        st.header("📄 Technical Documents & Reports")
-        
-        # Create sub-tabs for different document types
-        doc_tab1, doc_tab2, doc_tab3 = st.tabs([
-            "📊 Reports", "📐 Technical Drawings", "📋 SWAN Manuals"
-        ])
-        
-        # Define document directories
-        docs_base = os.path.join(BASE_DIR, "docs")
-        pdf_dirs = {
-            "Reports": os.path.join(docs_base, "reports"),
-            "Technical Drawings": os.path.join(docs_base, "drawings"),
-            "SWAN Manuals": os.path.join(docs_base, "manuals")
-        }
-        
-        # Tab 1: Reports
-        with doc_tab1:
-            st.markdown("### Analysis Reports")
-            
-            # PDF upload option
-            with st.expander("📤 Upload Your Own PDF", expanded=False):
-                uploaded_pdf = st.file_uploader(
-                    "Choose a PDF file",
-                    type=['pdf'],
-                    key="pdf_uploader"
-                )
-                if uploaded_pdf:
-                    st.success(f"✅ Uploaded: {uploaded_pdf.name}")
-                    
-                    # Display uploaded PDF
-                    base64_pdf = base64.b64encode(uploaded_pdf.getvalue()).decode('utf-8')
-                    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500" type="application/pdf"></iframe>'
-                    st.markdown(pdf_display, unsafe_allow_html=True)
-            
-            # Display existing reports
-            reports_dir = pdf_dirs["Reports"]
-            if os.path.exists(reports_dir):
-                report_files = glob.glob(os.path.join(reports_dir, "*.pdf"))
-                if report_files:
-                    for report in report_files:
-                        with st.expander(f"📄 {os.path.basename(report)}", expanded=False):
-                            display_pdf_with_controls(report)
-                else:
-                    st.info("No reports found. Add PDFs to: `docs/reports/`")
-            else:
-                st.info(f"Create directory: `{reports_dir}` and add PDFs")
-        
-        # Tab 2: Technical Drawings
-        with doc_tab2:
-            st.markdown("### Technical Drawings & Schematics")
-            
-            drawings_dir = pdf_dirs["Technical Drawings"]
-            if os.path.exists(drawings_dir):
-                drawing_files = glob.glob(os.path.join(drawings_dir, "*.pdf"))
-                if drawing_files:
-                    # Display as gallery
-                    display_pdf_gallery(drawings_dir)
-                else:
-                    st.info("No drawings found. Add PDFs to: `docs/drawings/`")
-            else:
-                st.info(f"Create directory: `{drawings_dir}` and add PDFs")
-        
-        # Tab 3: SWAN Manuals
-        with doc_tab3:
-            st.markdown("### SWAN Model Documentation")
-            
-            manuals_dir = pdf_dirs["SWAN Manuals"]
-            if os.path.exists(manuals_dir):
-                manual_files = glob.glob(os.path.join(manuals_dir, "*.pdf"))
-                if manual_files:
-                    for manual in manual_files:
-                        with st.expander(f"📘 {os.path.basename(manual)}", expanded=False):
-                            display_pdf_with_controls(manual)
-                else:
-                    st.info("No manuals found. Add PDFs to: `docs/manuals/`")
-            else:
-                st.info(f"Create directory: `{manuals_dir}` and add PDFs")
-        
-        # Batch download option
-        st.markdown("---")
-        st.markdown("### 📦 Batch Download")
-        
-        # Collect all PDFs
-        all_pdfs = []
-        for dir_name, dir_path in pdf_dirs.items():
-            if os.path.exists(dir_path):
-                all_pdfs.extend(glob.glob(os.path.join(dir_path, "*.pdf")))
-        
-        if all_pdfs:
-            st.write(f"**Total documents available:** {len(all_pdfs)}")
-            
-            # Create ZIP of all PDFs
-            import zipfile
-            import io
-            
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for pdf_path in all_pdfs:
-                    with open(pdf_path, 'rb') as f:
-                        zip_file.writestr(os.path.basename(pdf_path), f.read())
-            
-            st.download_button(
-                label="📦 Download All Documents (ZIP)",
-                data=zip_buffer.getvalue(),
-                file_name="nyenje_bay_documents.zip",
-                mime="application/zip"
-            )
-                
-            
-        
 
 if __name__ == "__main__":
     main()

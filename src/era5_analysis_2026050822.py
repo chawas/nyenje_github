@@ -12,8 +12,6 @@ Data Period: 1971-2020 (50 years)
 Debiasing Factor: 0.718 (CCMP)
 """
 
-
-
 import streamlit as st
 
 st.set_page_config(
@@ -35,8 +33,6 @@ import json
 import base64
 from datetime import datetime, timedelta
 from scipy.stats import pearsonr
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 warnings.filterwarnings('ignore')
 
 try:
@@ -226,7 +222,7 @@ def load_airport_data():
         return None
 
 # ============================================================================
-# SWAN INPUT File Generator
+# SWAN INPUT File Generator (NEW)
 # ============================================================================
 def generate_swan_input_file(wind_file_path, output_file_path, timestamp,
                              north_hs=0.25, north_tp=2.8, north_dir=180,
@@ -579,40 +575,21 @@ def extract_wind_from_file(file_path, target_lat=-16.53, target_lon=28.83):
         return None
 
 def process_all_files(data_dir, target_lat=-16.53, target_lon=28.83, progress_callback=None):
-    """
-    Process all NetCDF/GRIB files in directory with progress tracking
-    """
     all_files = []
     for ext in ['*.nc', '*.nc4', '*.grib', '*.grb', '*.grib2']:
         all_files.extend(glob.glob(os.path.join(data_dir, ext)))
-    
     if not all_files:
         return None
-    
     all_results = []
     file_count = len(all_files)
-    failed_files = []
-    
     for i, file_path in enumerate(all_files):
-        filename = os.path.basename(file_path)
-        
-        # Call progress callback if provided
         if progress_callback:
-            progress_callback(i + 1, file_count, filename)
-        
-        try:
-            results = extract_wind_from_file(file_path, target_lat, target_lon)
-            if results:
-                all_results.extend(results)
-            else:
-                failed_files.append(filename)
-        except Exception as e:
-            failed_files.append(f"{filename} (error: {str(e)[:50]})")
-    
+            progress_callback(i + 1, file_count, os.path.basename(file_path))
+        results = extract_wind_from_file(file_path, target_lat, target_lon)
+        if results:
+            all_results.extend(results)
     if not all_results:
         return None
-    
-    # Convert to DataFrame
     df = pd.DataFrame(all_results)
     df['datetime'] = pd.to_datetime(df['time'])
     df = df.sort_values('datetime').reset_index(drop=True)
@@ -620,8 +597,6 @@ def process_all_files(data_dir, target_lat=-16.53, target_lon=28.83, progress_ca
     df['year'] = df['datetime'].dt.year
     df['month'] = df['datetime'].dt.month
     df['day'] = df['datetime'].dt.day
-    
-    # Calculate wind averages
     wind_avg = calculate_wind_averages(df['speed'].values, df['datetime'])
     df['wind_speed_3min'] = wind_avg['wind_3min']
     df['wind_speed_10min'] = wind_avg['wind_10min']
@@ -629,27 +604,17 @@ def process_all_files(data_dir, target_lat=-16.53, target_lon=28.83, progress_ca
     df['gust_10sec'] = wind_avg['gust_10sec']
     df['wind_speed_hourly'] = df['speed']
     df['wind_direction'] = df['direction']
-    
-    # Calculate statistics
     diurnal_means = df.groupby('hour')['speed'].mean().reindex(range(24), fill_value=0).tolist()
     yearly_max = df.groupby('year')['speed'].max().to_dict()
     global_max_speed = df['speed'].max()
     global_max_year = df.loc[df['speed'].idxmax(), 'year'] if not df.empty else None
-    
     return {
-        'df': df,
-        'all_speeds': df['speed'].values,
-        'all_directions': df['direction'].values,
-        'all_times': df['datetime'].values,
-        'diurnal_means': diurnal_means,
-        'yearly_max': yearly_max,
-        'global_max': {'speed': global_max_speed, 'year': global_max_year},
-        'total_records': len(df),
-        'years': sorted(df['year'].unique()),
-        'failed_files': failed_files,
-        'processed_files': file_count - len(failed_files),
-        'total_files': file_count
+        'df': df, 'all_speeds': df['speed'].values, 'all_directions': df['direction'].values,
+        'all_times': df['datetime'].values, 'diurnal_means': diurnal_means,
+        'yearly_max': yearly_max, 'global_max': {'speed': global_max_speed, 'year': global_max_year},
+        'total_records': len(df), 'years': sorted(df['year'].unique()),
     }
+
 def process_demo_data():
     np.random.seed(42)
     dates = pd.date_range(start='1971-01-01', end='2020-12-31 23:00', freq='H')
@@ -768,82 +733,6 @@ def find_highest_wave(data, fetch_km, use_debiased, data_source):
     return max_wave, top10
 
 # ============================================================================
-# PDF VIEWER FUNCTIONS
-# ============================================================================
-
-def display_pdf_simple(pdf_path):
-    """Simple PDF viewer with embedded iframe"""
-    if os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as f:
-            pdf_data = f.read()
-        
-        # Display PDF using base64 embedding
-        base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
-        st.markdown(pdf_display, unsafe_allow_html=True)
-        
-        # Add download button
-        st.download_button(
-            label="📥 Download PDF",
-            data=pdf_data,
-            file_name=os.path.basename(pdf_path),
-            mime="application/pdf"
-        )
-    else:
-        st.error(f"PDF not found: {pdf_path}")
-
-def display_pdf_with_controls(pdf_path):
-    """Display PDF with metadata and controls"""
-    if not os.path.exists(pdf_path):
-        st.error(f"PDF not found: {pdf_path}")
-        return
-    
-    # Show file info
-    file_size = os.path.getsize(pdf_path) / 1024  # KB
-    st.caption(f"📄 File: {os.path.basename(pdf_path)} | Size: {file_size:.1f} KB")
-    
-    # Display PDF
-    with open(pdf_path, "rb") as f:
-        pdf_data = f.read()
-    
-    base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="550" type="application/pdf"></iframe>'
-    st.markdown(pdf_display, unsafe_allow_html=True)
-    
-    # Download button
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button(
-            label="📥 Download PDF",
-            data=pdf_data,
-            file_name=os.path.basename(pdf_path),
-            mime="application/pdf"
-        )
-    with col2:
-        # Open in new tab button
-        st.markdown(f'<a href="data:application/pdf;base64,{base64_pdf}" target="_blank"><button style="background-color: #4CAF50; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">🔗 Open in New Tab</button></a>', unsafe_allow_html=True)
-
-def get_pdf_info(pdf_path):
-    """Extract PDF metadata (if PyPDF2 is available)"""
-    try:
-        import PyPDF2
-        with open(pdf_path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
-            info = {
-                'pages': len(reader.pages),
-                'metadata': dict(reader.metadata) if reader.metadata else {}
-            }
-        return info
-    except:
-        return None
-
-def list_pdfs_in_directory(directory):
-    """Return list of PDF files in directory"""
-    if not os.path.exists(directory):
-        return []
-    return glob.glob(os.path.join(directory, "*.pdf"))
-
-# ============================================================================
 # Main App
 # ============================================================================
 def main():
@@ -929,12 +818,11 @@ def main():
     st.info("💡 **Key Concept:** Bathymetry is **CONSTANT**. Wind files are **VARIABLE**. SWAN INPUT files are **DYNAMIC**.")
 
     # Tabs
-    # Add to your tabs declaration (add tab7)
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "📥 Data Acquisition", "💨 Wind Statistics", 
-    "🌊 Wave Analysis (JONSWAP)", "🌊 SWAN Model", 
-    "✅ Live Validation", "📍 Nyenje Bay Gallery", "📄 Documents"
-])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📥 Data Acquisition", "💨 Wind Statistics", 
+        "🌊 Wave Analysis (JONSWAP)", "🌊 SWAN Model", "✅ Live Validation"
+    ])
+
     # ========================================================================
     # TAB 1: Data Acquisition (WITH PROGRESS BAR)
     # ========================================================================
@@ -979,7 +867,7 @@ def main():
                     st.success("✅ Debiasing complete!")
         
         # ================================================================
-        # PROCESS DATA WITH PROGRESS BAR (ENHANCED - KEPT ALL FUNCTIONALITY)
+        # PROCESS DATA WITH PROGRESS BAR (ENHANCED)
         # ================================================================
         with sub4:
             st.markdown("### ⚙️ Process Data for Statistics")
@@ -1006,15 +894,13 @@ def main():
                 st.info("Demo data - synthetic, NE prevailing (51.6°)")
             
             # Show files if using real data
-            files = []
             if use_dir and os.path.exists(use_dir):
-                files = glob.glob(os.path.join(use_dir, "*.nc")) + glob.glob(os.path.join(use_dir, "*.nc4")) + glob.glob(os.path.join(use_dir, "*.grib")) + glob.glob(os.path.join(use_dir, "*.grb"))
+                files = glob.glob(os.path.join(use_dir, "*.nc")) + glob.glob(os.path.join(use_dir, "*.nc4"))
                 if files:
-                    st.success(f"✅ Found {len(files)} NetCDF/GRIB files")
-                    st.info(f"📊 Total data points estimate: ~{len(files) * 8760:,} hours (if yearly files)")
+                    st.success(f"✅ Found {len(files)} NetCDF files")
                 else:
-                    st.warning(f"⚠️ No data files found in {use_dir}")
-                    st.info("Supported formats: .nc, .nc4, .grib, .grb, .grib2")
+                    st.warning(f"⚠️ No NetCDF files found in {use_dir}")
+                    st.info("Place ERA5 NetCDF files in this directory, or use Demo Data")
             
             col1, col2 = st.columns(2)
             with col1:
@@ -1030,129 +916,47 @@ def main():
             with col2:
                 if st.button("📊 Process Files", use_container_width=True, type="primary"):
                     if not XARRAY_AVAILABLE:
-                        st.error("❌ xarray not installed. Run: pip install xarray netCDF4 cfgrib")
+                        st.error("Install: pip install xarray netCDF4 cfgrib")
                     elif not use_dir:
-                        st.error("❌ Select a data source first")
+                        st.error("Select a data source first")
                     elif not files:
-                        st.error(f"❌ No supported files found in {use_dir}")
+                        st.error(f"No NetCDF files found in {use_dir}")
                     else:
-                        # Create a placeholder for dynamic updates
-                        progress_placeholder = st.empty()
-                        status_placeholder = st.empty()
-                        file_placeholder = st.empty()
-                        time_placeholder = st.empty()
-                        
-                        # Initialize
-                        all_results = []
-                        total_files = len(files)
-                        start_time = datetime.now()
-                        
-                        # Show initial progress bar
-                        progress_bar = progress_placeholder.progress(0)
-                        status_placeholder.info(f"📊 Processing {total_files} files...")
-                        
-                        # Process each file with forced UI updates
-                        for i, file_path in enumerate(files):
-                            filename = os.path.basename(file_path)
-                            percent = ((i + 1) / total_files) * 100
+                        with st.spinner(f"Processing {source_name} data..."):
+                            # Create progress indicators
+                            progress_bar = st.progress(0)
+                            status_text = st.empty()
+                            file_text = st.empty()
                             
-                            # Update progress bar
-                            progress_bar.progress((i + 1) / total_files)
+                            def update_progress(current, total, filename):
+                                progress_bar.progress(current / total)
+                                status_text.text(f"📊 Progress: {current}/{total} files")
+                                file_text.text(f"📁 Processing: {filename}")
                             
-                            # Update file status
-                            file_placeholder.info(f"📄 Processing: **{filename}** ({i+1}/{total_files})")
+                            result = process_all_files(use_dir, NYENJE_CENTER_LAT, NYENJE_CENTER_LON, update_progress)
                             
-                            # Show estimated time
-                            if i > 0:
-                                elapsed = (datetime.now() - start_time).total_seconds()
-                                avg_time = elapsed / i
-                                remaining = avg_time * (total_files - i)
-                                time_placeholder.caption(f"⏱️ Estimated remaining: {remaining/60:.1f} minutes | ⏱️ Elapsed: {elapsed/60:.1f} min")
+                            # Clear progress indicators
+                            progress_bar.empty()
+                            status_text.empty()
+                            file_text.empty()
                             
-                            # Force Streamlit to update (critical!)
-                            import time
-                            time.sleep(0.01)  # Tiny pause to allow UI update
-                            
-                            # Process the file
-                            results = extract_wind_from_file(file_path, NYENJE_CENTER_LAT, NYENJE_CENTER_LON)
-                            if results:
-                                all_results.extend(results)
-                        
-                        # Clear placeholders
-                        progress_placeholder.empty()
-                        status_placeholder.empty()
-                        file_placeholder.empty()
-                        time_placeholder.empty()
-                        
-                        if not all_results:
-                            st.error("❌ No data could be extracted from the files")
-                        else:
-                            # Convert to DataFrame (same as before)
-                            df = pd.DataFrame(all_results)
-                            df['datetime'] = pd.to_datetime(df['time'])
-                            df = df.sort_values('datetime').reset_index(drop=True)
-                            df['hour'] = df['datetime'].dt.hour
-                            df['year'] = df['datetime'].dt.year
-                            df['month'] = df['datetime'].dt.month
-                            df['day'] = df['datetime'].dt.day
-                            
-                            # Calculate wind averages
-                            wind_avg = calculate_wind_averages(df['speed'].values, df['datetime'])
-                            df['wind_speed_3min'] = wind_avg['wind_3min']
-                            df['wind_speed_10min'] = wind_avg['wind_10min']
-                            df['gust_3sec'] = wind_avg['gust_3sec']
-                            df['gust_10sec'] = wind_avg['gust_10sec']
-                            df['wind_speed_hourly'] = df['speed']
-                            df['wind_direction'] = df['direction']
-                            
-                            # Calculate statistics
-                            diurnal_means = df.groupby('hour')['speed'].mean().reindex(range(24), fill_value=0).tolist()
-                            yearly_max = df.groupby('year')['speed'].max().to_dict()
-                            global_max_speed = df['speed'].max()
-                            global_max_year = df.loc[df['speed'].idxmax(), 'year'] if not df.empty else None
-                            
-                            # Create result dictionary
-                            result = {
-                                'df': df,
-                                'all_speeds': df['speed'].values,
-                                'all_directions': df['direction'].values,
-                                'all_times': df['datetime'].values,
-                                'diurnal_means': diurnal_means,
-                                'yearly_max': yearly_max,
-                                'global_max': {'speed': global_max_speed, 'year': global_max_year},
-                                'total_records': len(df),
-                                'years': sorted(df['year'].unique()),
-                            }
-                            
-                            # Store in session state
-                            st.session_state.processed_data = result
-                            st.session_state.processed = True
-                            st.session_state.data_source = source_name
-                            
-                            total_time = (datetime.now() - start_time).total_seconds()
-                            
-                            # Display summary
-                            st.markdown("---")
-                            st.markdown("### 📊 Processing Summary")
-                            
-                            col_a, col_b, col_c, col_d = st.columns(4)
-                            with col_a:
-                                st.metric("📁 Files Processed", f"{len(files)}/{len(files)}")
-                            with col_b:
-                                st.metric("📅 Total Records", f"{result['total_records']:,}")
-                            with col_c:
-                                st.metric("📆 Years Range", f"{result['years'][0]} - {result['years'][-1]}")
-                            with col_d:
-                                st.metric("💨 Max Wind", f"{result['global_max']['speed']:.2f} m/s")
-                            
-                            # Show data quality metrics
-                            mean_dir, strength = calculate_circular_mean(result['all_directions'])
-                            st.success(f"✅ **Data Summary:** Mean wind speed: {np.mean(result['all_speeds']):.2f} m/s | Mean direction: {mean_dir:.1f}° ({wind_direction_to_cardinal(mean_dir)})")
-                            st.info(f"⏱️ Total processing time: {total_time:.1f} seconds")
-                            
-                            if "Debiased" in source_name:
+                            if result and result['total_records'] > 0:
+                                st.session_state.processed_data = result
+                                st.session_state.processed = True
+                                st.session_state.data_source = source_name
+                                st.success(f"✅ Processed {result['total_records']:,} records from {source_name}")
+                                st.info(f"🏆 Max wind: {result['global_max']['speed']:.2f} m/s ({result['global_max']['year']})")
+                                
+                                # Show summary of loaded data
+                                mean_dir, _ = calculate_circular_mean(result['all_directions'])
+                                st.info(f"📊 Loaded data summary: Mean wind speed: {np.mean(result['all_speeds']):.2f} m/s | Mean direction: {mean_dir:.1f}° ({wind_direction_to_cardinal(mean_dir)})")
+                                
+                                if "Debiased" in source_name:
+                                    st.success("✅ Using DEBIASED ERA5 - NE prevailing direction expected")
                                 st.balloons()
-                                st.success("🎉 **Using DEBIASED ERA5 - NE prevailing direction expected**")
+                            else:
+                                st.error("No data could be processed")
+        
         with sub5:
             st.markdown("### 🌊 Extract SWAN Wind Files")
             extract_year = st.selectbox("Select Year", list(range(1971, 2021)), index=49)
@@ -1384,55 +1188,135 @@ def main():
                     if use_debiased and st.session_state.data_source != "Demo" and "Raw" in st.session_state.data_source:
                         wind_speed = wind_speed * DEBIAS_FACTOR
                     
-                    # Generate and display SWAN INPUT file
+                    # Display wind parameters
+                    st.info(f"**Selected Time:** {selected_year}-{selected_month:02d}-{selected_day:02d} {selected_hour:02d}:00")
+                    st.info(f"**Wind Speed:** {wind_speed:.2f} m/s | **Wind Direction:** {wind_dir:.1f}° ({wind_direction_to_cardinal(wind_dir)})")
+                    
+                    # Generate SWAN INPUT file (for display only)
                     wind_file_demo = os.path.join(WIND_FILES_DIR, str(selected_year), f"nyenje_wind_{selected_year}{selected_month:02d}{selected_day:02d}_{selected_hour:02d}00.wnd")
                     timestamp_str = f"{selected_year}{selected_month:02d}{selected_day:02d}_{selected_hour:02d}00"
                     swan_input = generate_swan_input_file(wind_file_demo, f"output_{timestamp_str}.txt", timestamp_str)
                     
-                    with st.expander("📄 **SWAN INPUT File** (Created dynamically for this run)", expanded=True):
+                    with st.expander("📄 **SWAN INPUT File** (Created dynamically for this run)", expanded=False):
                         st.code(swan_input, language="text")
                     
-                    # Compute wave distribution
-                    wave_heights_grid, wave_periods_grid, depth_grid = generate_swan_wave_distribution(wind_speed, wind_dir)
+                    # Compute wave distribution using the existing function
+                    st.subheader("🌊 Wave Distribution Results")
                     
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("💨 Wind Speed", f"{wind_speed:.2f} m/s")
-                        st.metric("🧭 Wind Direction", f"{wind_dir:.1f}° ({wind_direction_to_cardinal(wind_dir)})")
-                    with col2:
+                    # Call the function - it returns 3 values: hs_grid, tp_grid, depth_grid
+                    hs_grid, tp_grid, depth_grid = generate_swan_wave_distribution(wind_speed, wind_dir)
+                    
+                    # Check if we got valid data
+                    if hs_grid is not None and len(hs_grid) > 0:
+                        # Display statistics at key locations
                         center_idx_x = NX // 2
                         center_idx_y = NY // 2
-                        center_hs = wave_heights_grid[center_idx_y, center_idx_x]
-                        center_tp = wave_periods_grid[center_idx_y, center_idx_x]
-                        st.metric("🌊 Center Wave Height", f"{center_hs:.3f} m ({center_hs*100:.1f} cm)")
-                        st.metric("⏱️ Center Wave Period", f"{center_tp:.2f} s")
-                    
-                    # Create side-by-side contour maps
-                    st.subheader("🗺️ Wave Distribution Maps")
-                    fig_hs = go.Figure(data=go.Heatmap(
-                        z=wave_heights_grid * 100,
-                        x=[f"{i*500}m" for i in range(NX)],
-                        y=[f"{i*500}m" for i in range(NY)],
-                        colorscale='RdYlGn',
-                        text=np.round(wave_heights_grid * 100, 1),
-                        texttemplate='<b>%{text} cm</b>',
-                        colorbar_title="Wave Height (cm)"
-                    ))
-                    fig_hs.update_layout(title="Wave Height Distribution", height=450, xaxis_title="Distance from West (m)", yaxis_title="Distance from South (m)")
-                    st.plotly_chart(fig_hs, use_container_width=True)
-                    
-                    fig_tp = go.Figure(data=go.Heatmap(
-                        z=wave_periods_grid,
-                        x=[f"{i*500}m" for i in range(NX)],
-                        y=[f"{i*500}m" for i in range(NY)],
-                        colorscale='Plasma',
-                        text=np.round(wave_periods_grid, 1),
-                        texttemplate='<b>%{text} s</b>',
-                        colorbar_title="Wave Period (s)"
-                    ))
-                    fig_tp.update_layout(title="Wave Period Distribution", height=450, xaxis_title="Distance from West (m)", yaxis_title="Distance from South (m)")
-                    st.plotly_chart(fig_tp, use_container_width=True)
-
+                        center_hs = hs_grid[center_idx_y, center_idx_x]
+                        center_tp = tp_grid[center_idx_y, center_idx_x]
+                        
+                        # Find max values
+                        max_hs = np.max(hs_grid)
+                        max_hs_pos = np.unravel_index(np.argmax(hs_grid), hs_grid.shape)
+                        min_depth = np.min(depth_grid)
+                        max_depth = np.max(depth_grid)
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("📊 Center Wave Height", f"{center_hs:.3f} m ({center_hs*100:.1f} cm)")
+                        with col2:
+                            st.metric("⏱️ Center Wave Period", f"{center_tp:.2f} s")
+                        with col3:
+                            st.metric("🔝 Maximum Wave Height", f"{max_hs:.3f} m ({max_hs*100:.1f} cm)")
+                        with col4:
+                            st.metric("📏 Depth Range", f"{min_depth:.1f} - {max_depth:.1f} m")
+                        
+                        # Create side-by-side contour maps
+                        st.subheader("🗺️ Wave Distribution Maps")
+                        
+                        # Prepare x and y coordinates for display
+                        x_labels = [f"{i*500}m" for i in range(NX)]
+                        y_labels = [f"{i*500}m" for i in range(NY)]
+                        
+                        # Wave Height map (in cm for better readability)
+                        fig_hs = go.Figure(data=go.Heatmap(
+                            z=hs_grid * 100,  # Convert to cm
+                            x=x_labels,
+                            y=y_labels,
+                            colorscale='RdYlGn',
+                            text=np.round(hs_grid * 100, 1),
+                            texttemplate='<b>%{text} cm</b>',
+                            textfont={"size": 10},
+                            colorbar_title="Wave Height (cm)",
+                            hovertemplate='X: %{x}<br>Y: %{y}<br>Height: %{z:.1f} cm<extra></extra>'
+                        ))
+                        fig_hs.update_layout(
+                            title="Wave Height Distribution",
+                            height=450,
+                            xaxis_title="Distance from West (m)",
+                            yaxis_title="Distance from South (m)"
+                        )
+                        st.plotly_chart(fig_hs, use_container_width=True)
+                        
+                        # Wave Period map
+                        fig_tp = go.Figure(data=go.Heatmap(
+                            z=tp_grid,
+                            x=x_labels,
+                            y=y_labels,
+                            colorscale='Plasma',
+                            text=np.round(tp_grid, 1),
+                            texttemplate='<b>%{text} s</b>',
+                            textfont={"size": 10},
+                            colorbar_title="Wave Period (s)",
+                            hovertemplate='X: %{x}<br>Y: %{y}<br>Period: %{z:.2f} s<extra></extra>'
+                        ))
+                        fig_tp.update_layout(
+                            title="Wave Period Distribution",
+                            height=450,
+                            xaxis_title="Distance from West (m)",
+                            yaxis_title="Distance from South (m)"
+                        )
+                        st.plotly_chart(fig_tp, use_container_width=True)
+                        
+                        # Depth map for reference
+                        st.subheader("🗺️ Bathymetry (Reference)")
+                        fig_depth = go.Figure(data=go.Heatmap(
+                            z=depth_grid,
+                            x=x_labels,
+                            y=y_labels,
+                            colorscale='Viridis',
+                            text=np.round(depth_grid, 1),
+                            texttemplate='<b>%{text} m</b>',
+                            textfont={"size": 10},
+                            colorbar_title="Depth (m)",
+                            hovertemplate='X: %{x}<br>Y: %{y}<br>Depth: %{z:.1f} m<extra></extra>'
+                        ))
+                        fig_depth.update_layout(
+                            title="Bathymetry Distribution",
+                            height=450,
+                            xaxis_title="Distance from West (m)",
+                            yaxis_title="Distance from South (m)"
+                        )
+                        st.plotly_chart(fig_depth, use_container_width=True)
+                        
+                        # Download option
+                        import io
+                        output_data = pd.DataFrame({
+                            'X_m': np.repeat(x_labels, NY),
+                            'Y_m': np.tile(y_labels, NX),
+                            'Depth_m': depth_grid.flatten(),
+                            'Wave_Height_m': hs_grid.flatten(),
+                            'Wave_Height_cm': (hs_grid * 100).flatten(),
+                            'Wave_Period_s': tp_grid.flatten()
+                        })
+                        csv = output_data.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download Wave Distribution Data (CSV)",
+                            csv,
+                            f"swan_results_{timestamp_str}.csv",
+                            "text/csv"
+                        )
+                    else:
+                        st.error("Failed to generate wave distribution. Please check bathymetry data.")
         # SUB-TAB 2: Monthly Maxima
         with swan_sub2:
             st.subheader("📅 Monthly Maximum Wave Heights")
@@ -1590,415 +1474,6 @@ def main():
             - Bias reduced from {val['raw_bias']:.3f} m/s to {val['debiased_bias']:.3f} m/s ({val['bias_improvement']:.0f}% improvement)
             - RMSE reduced from {val['raw_rmse']:.3f} m/s to {val['debiased_rmse']:.3f} m/s ({val['rmse_improvement']:.0f}% improvement)
             """)
-
-    # ========================================================================
-    # TAB 6: Nyenje Bay Gallery
-    # ========================================================================
-    with tab6:
-        st.header("📍 Nyenje Bay - Site Gallery")
-        st.markdown("**Location:** 16.53°S, 28.83°E | Lake Kariba, Zimbabwe")
-        
-        # Create sub-tabs for different image types
-        gallery_tab1, gallery_tab2, gallery_tab3, gallery_tab4 = st.tabs([
-            "📸 Site Photos", "🗺️ Location Map", "📊 Domain Grid", "📈 Site Schematic"
-        ])
-        
-        with gallery_tab1:
-            st.subheader("📸 Nyenje Bay Photographs")
-            
-            # Add file uploader for users to upload their own photos
-            with st.expander("📤 Upload Your Own Photos", expanded=False):
-                uploaded_photos = st.file_uploader(
-                    "Choose photos of Nyenje Bay",
-                    type=['jpg', 'jpeg', 'png', 'gif'],
-                    accept_multiple_files=True,
-                    key="photo_uploader"
-                )
-                
-                if uploaded_photos:
-                    st.success(f"✅ {len(uploaded_photos)} photos uploaded")
-                    for photo in uploaded_photos:
-                        st.image(photo, caption=photo.name, use_container_width=True)
-            
-            # Define possible image paths (local files)
-            st.markdown("---")
-            st.markdown("### 📁 Local Site Photos")
-            
-            image_dirs = [
-                os.path.join(BASE_DIR, "docs", "images"),
-                os.path.join(BASE_DIR, "docs", "images", "nyenje"),
-                os.path.join(BASE_DIR, "data", "images"),
-                os.path.join(BASE_DIR, "photos"),
-            ]
-            
-            # Collect all images from directories
-            all_images = []
-            for img_dir in image_dirs:
-                if os.path.exists(img_dir):
-                    for ext in ['*.jpg', '*.jpeg', '*.png', '*.gif']:
-                        all_images.extend(glob.glob(os.path.join(img_dir, ext)))
-            
-            if all_images:
-                # Add a button to browse and select images
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if st.button("🖼️ Show All Local Photos", use_container_width=True):
-                        st.session_state.show_all_photos = True
-                with col_btn2:
-                    if st.button("📁 Browse Photo Directory", use_container_width=True):
-                        st.session_state.browse_photos = True
-                
-                # Display photos in a grid
-                if st.session_state.get('show_all_photos', False):
-                    st.markdown("### 🖼️ Photo Gallery")
-                    
-                    # Display in 3 columns
-                    cols = st.columns(3)
-                    for idx, img_path in enumerate(all_images):
-                        with cols[idx % 3]:
-                            st.image(img_path, caption=os.path.basename(img_path), use_container_width=True)
-                            # Add download button for each image
-                            with open(img_path, "rb") as f:
-                                st.download_button(
-                                    label=f"📥 Download",
-                                    data=f.read(),
-                                    file_name=os.path.basename(img_path),
-                                    mime="image/jpeg",
-                                    key=f"download_{idx}"
-                                )
-                
-                # Browse directory
-                if st.session_state.get('browse_photos', False):
-                    st.markdown("### 📁 Photo Directory Browser")
-                    for img_dir in image_dirs:
-                        if os.path.exists(img_dir):
-                            st.code(f"📂 {img_dir}")
-                            for f in os.listdir(img_dir)[:10]:
-                                if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                                    st.text(f"  📷 {f}")
-            else:
-                st.info("""
-                ### 📸 Add Site Photos
-                
-                **Ways to add photos:**
-                1. **Upload above** - Use the file uploader to add photos temporarily
-                2. **Add to folder** - Place images in one of these folders:
-                   - `docs/images/nyenje/`
-                   - `data/images/`
-                   - `photos/`
-                3. **Browse** - Use the buttons above to browse available photos
-                
-                **Recommended images:**
-                - Aerial/satellite view of Nyenje Bay
-                - Shoreline conditions
-                - Fetch length perspective
-                - Bathymetry visualization
-                """)
-                
-                st.markdown("---")
-                st.markdown("""
-                ### 📋 Site Context
-                
-                | Parameter | Value |
-                |-----------|-------|
-                | **Location** | Nyenje Bay, Lake Kariba |
-                | **Coordinates** | 16.53°S, 28.83°E |
-                | **Country** | Zimbabwe / Zambia border |
-                | **Water Body** | Lake Kariba (world's largest man-made lake) |
-                | **Domain Size** | 4.0 km × 3.5 km |
-                | **Grid Resolution** | 9 × 8 points (500 m spacing) |
-                | **Fetch Length** | 4 km (West direction - open lake) |
-                | **Water Depth** | 1.5 m (shallow) to 30 m (deep) |
-                """)
-        with gallery_tab2:
-            st.subheader("🗺️ Nyenje Bay Location Map")
-            
-            # Define PNG map path
-            png_map_path = os.path.join(BASE_DIR, "docs", "images", "nyenje_map.png")
-            
-            if os.path.exists(png_map_path):
-                st.image(png_map_path, caption="Nyenje Bay Study Area", use_container_width=True)
-                with open(png_map_path, "rb") as f:
-                    st.download_button(
-                        label="📥 Download Map",
-                        data=f.read(),
-                        file_name="nyenje_bay_map.png",
-                        mime="image/png"
-                    )
-            else:
-                st.warning(f"⚠️ Map file not found at: {png_map_path}")
-                st.info("Place your Nyenje Bay map image at the path above to display it here.")
-                
-                # Generate a simple location map using matplotlib
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-                
-                # Map 1: Africa context
-                ax1.set_xlim(-20, 55)
-                ax1.set_ylim(-35, 40)
-                ax1.set_facecolor('#e6f3ff')
-                africa_x = [-18, -12, -10, 12, 15, 25, 30, 35, 32, 25, 15, 10, -5, -15, -18]
-                africa_y = [30, 35, 37, 35, 30, 22, 15, 5, 0, -5, -10, -15, -20, -25, 30]
-                ax1.fill(africa_x, africa_y, alpha=0.7, color='#d4e6b3', edgecolor='black', linewidth=0.5)
-                ax1.scatter(28.83, -16.53, s=150, c='red', marker='D', zorder=5)
-                ax1.annotate('Nyenje Bay', (28.83, -16.53), xytext=(5, 5), textcoords='offset points', fontsize=9, fontweight='bold')
-                ax1.set_title('Location in Africa', fontsize=12, fontweight='bold')
-                ax1.grid(True, alpha=0.2)
-                
-                # Map 2: Lake Kariba zoom
-                ax2.set_xlim(27.5, 29.5)
-                ax2.set_ylim(-18, -15)
-                ax2.set_facecolor('#e6f3ff')
-                lake_x = [27.5, 29.5, 29.5, 27.5, 27.5]
-                lake_y = [-17.5, -17.5, -15.5, -15.5, -17.5]
-                ax2.fill(lake_x, lake_y, alpha=0.4, color='blue', label='Lake Kariba')
-                ax2.scatter(28.83, -16.53, s=300, c='red', marker='D', zorder=5, edgecolor='black', linewidth=2)
-                ax2.annotate('Nyenje Bay\n(Study Site)', (28.83, -16.53), xytext=(0.5, 0.5), textcoords='offset points', fontsize=10, fontweight='bold', color='red')
-                ax2.set_title('Lake Kariba Region', fontsize=12, fontweight='bold')
-                ax2.grid(True, alpha=0.3)
-                ax2.legend(loc='lower right')
-                
-                plt.tight_layout()
-                st.pyplot(fig)
-            
-            with st.expander("📍 Site Coordinates", expanded=False):
-                st.markdown("""
-                | Feature | Latitude | Longitude |
-                |---------|----------|-----------|
-                | **Nyenje Bay Center** | 16.53°S | 28.83°E |
-                | **Western Boundary** | 16.53°S | 28.81113°E |
-                | **Eastern Boundary** | 16.53°S | 28.84887°E |
-                | **Southern Boundary** | 16.54577°S | 28.83°E |
-                | **Northern Boundary** | 16.51423°S | 28.83°E |
-                """)
-        
-        with gallery_tab3:
-            st.subheader("📊 Study Domain Grid Visualization")
-            st.markdown("**Domain:** 4.0 km × 3.5 km | **Grid:** 9 × 8 points | **Resolution:** 500 m")
-            
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-            
-            # Plot 1: Grid points
-            x_coords = np.linspace(0, DOMAIN_X/1000, NX)
-            y_coords = np.linspace(0, DOMAIN_Y/1000, NY)
-            X, Y = np.meshgrid(x_coords, y_coords)
-            ax1.scatter(X, Y, s=50, c='blue', marker='o', alpha=0.7)
-            for x in x_coords:
-                ax1.axvline(x, color='gray', linewidth=0.5, alpha=0.5, linestyle='--')
-            for y in y_coords:
-                ax1.axhline(y, color='gray', linewidth=0.5, alpha=0.5, linestyle='--')
-            center_x = DOMAIN_X/1000/2
-            center_y = DOMAIN_Y/1000/2
-            ax1.scatter(center_x, center_y, s=200, c='red', marker='*', zorder=5)
-            ax1.annotate('Analysis Center', (center_x, center_y), xytext=(5, 5), textcoords='offset points', fontsize=9, fontweight='bold', color='red')
-            ax1.set_xlabel('Distance from West (km)')
-            ax1.set_ylabel('Distance from South (km)')
-            ax1.set_title(f'Grid Layout: {NX} × {NY} points (500 m resolution)')
-            ax1.grid(True, alpha=0.2)
-            ax1.set_aspect('equal')
-            
-            # Plot 2: Bathymetry
-            if REAL_BATHYMETRY is not None:
-                im = ax2.imshow(REAL_BATHYMETRY, extent=[0, DOMAIN_X/1000, 0, DOMAIN_Y/1000], origin='lower', cmap='viridis', aspect='auto')
-                plt.colorbar(im, ax=ax2, label='Depth (m)')
-                ax2.set_title('Bathymetry Distribution')
-            else:
-                x = np.linspace(0, DOMAIN_X/1000, NX)
-                y = np.linspace(0, DOMAIN_Y/1000, NY)
-                X_synth, Y_synth = np.meshgrid(x, y)
-                depth_synth = 30 - (Y_synth / (DOMAIN_Y/1000)) * 28.5
-                depth_synth = np.maximum(depth_synth, 1.5)
-                im = ax2.imshow(depth_synth, extent=[0, DOMAIN_X/1000, 0, DOMAIN_Y/1000], origin='lower', cmap='viridis', aspect='auto')
-                plt.colorbar(im, ax=ax2, label='Depth (m)')
-                ax2.set_title('Synthetic Bathymetry')
-            
-            for x in x_coords:
-                ax2.axvline(x, color='white', linewidth=0.3, alpha=0.5)
-            for y in y_coords:
-                ax2.axhline(y, color='white', linewidth=0.3, alpha=0.5)
-            ax2.set_xlabel('Distance from West (km)')
-            ax2.set_ylabel('Distance from South (km)')
-            ax2.set_aspect('equal')
-            
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # Domain statistics
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Grid Points", f"{NX * NY}")
-            with col2:
-                st.metric("Domain Width", f"{DOMAIN_X/1000:.1f} km")
-            with col3:
-                st.metric("Domain Height", f"{DOMAIN_Y/1000:.1f} km")
-            with col4:
-                st.metric("Cell Area", f"{0.5 * 0.5:.2f} km²")
-            
-            if REAL_BATHYMETRY is not None:
-                st.info(f"📊 **Bathymetry Statistics:** Min: {REAL_BATHYMETRY.min():.1f} m | Max: {REAL_BATHYMETRY.max():.1f} m | Mean: {REAL_BATHYMETRY.mean():.1f} m")
-        
-        with gallery_tab4:
-            st.subheader("📈 Site Schematic - Wind & Wave Setup")
-            st.markdown("**Conceptual diagram showing wind direction, fetch, and wave generation**")
-            
-            fig, ax = plt.subplots(figsize=(12, 8))
-            ax.set_xlim(0, 10)
-            ax.set_ylim(0, 10)
-            ax.set_facecolor('#f0f4f8')
-            
-            # Draw water body
-            lake = plt.Rectangle((0, 0), 10, 10, alpha=0.3, facecolor='lightblue', edgecolor='blue', linewidth=2)
-            ax.add_patch(lake)
-            
-            # Draw Nyenje Bay area
-            bay = plt.Rectangle((2, 2), 6, 5, alpha=0.5, facecolor='#87CEEB', edgecolor='darkblue', linewidth=2)
-            ax.add_patch(bay)
-            ax.text(5, 4.5, 'Nyenje Bay', fontsize=14, ha='center', fontweight='bold', color='darkblue')
-            ax.text(5, 3.8, 'Fetch-Limited Bay', fontsize=10, ha='center', style='italic', color='darkblue')
-            
-            # Draw fetch arrow
-            ax.annotate('', xy=(8, 8), xytext=(3, 3), arrowprops=dict(arrowstyle='->', lw=3, color='red'))
-            ax.text(5.5, 5.5, 'Prevailing Wind (NE)', fontsize=12, ha='center', color='red', fontweight='bold')
-            ax.text(5.5, 5.0, 'Fetch Length: 4 km', fontsize=10, ha='center', style='italic', color='darkred')
-            
-            # Add wave symbols
-            wave_x = [3, 4, 5, 6, 7]
-            wave_y = [2.5, 2.5, 2.5, 2.5, 2.5]
-            for wx, wy in zip(wave_x, wave_y):
-                ax.plot([wx-0.2, wx, wx+0.2], [wy, wy+0.2, wy], 'b-', linewidth=2)
-            ax.text(5, 2.0, 'Generated Waves', fontsize=10, ha='center', color='blue')
-            
-            # Add wind rose
-            wind_rose_center = (9, 1.5)
-            ax.plot(wind_rose_center[0], wind_rose_center[1], 'ko', markersize=5)
-            ax.annotate('', xy=(wind_rose_center[0], wind_rose_center[1]+1), xytext=wind_rose_center, arrowprops=dict(arrowstyle='->', lw=1.5, color='black'))
-            ax.annotate('', xy=(wind_rose_center[0]+1, wind_rose_center[1]), xytext=wind_rose_center, arrowprops=dict(arrowstyle='->', lw=1.5, color='black'))
-            ax.annotate('', xy=(wind_rose_center[0], wind_rose_center[1]-1), xytext=wind_rose_center, arrowprops=dict(arrowstyle='->', lw=1.5, color='black'))
-            ax.annotate('', xy=(wind_rose_center[0]-1, wind_rose_center[1]), xytext=wind_rose_center, arrowprops=dict(arrowstyle='->', lw=1.5, color='black'))
-            
-            ax.set_title('Nyenje Bay: Wind-Wave Setup for FPV Design', fontsize=14, fontweight='bold', pad=20)
-            ax.set_xlabel('Distance (km)')
-            ax.set_ylabel('Distance (km)')
-            ax.grid(True, alpha=0.2, linestyle='--')
-            ax.set_aspect('equal')
-            
-            st.pyplot(fig)
-            
-            
-            
-
-
-    # Add this after tab6
-    with tab7:
-        st.header("📄 Technical Documents & Reports")
-        
-        # Create sub-tabs for different document types
-        doc_tab1, doc_tab2, doc_tab3 = st.tabs([
-            "📊 Reports", "📐 Technical Drawings", "📋 SWAN Manuals"
-        ])
-        
-        # Define document directories
-        docs_base = os.path.join(BASE_DIR, "docs")
-        pdf_dirs = {
-            "Reports": os.path.join(docs_base, "reports"),
-            "Technical Drawings": os.path.join(docs_base, "drawings"),
-            "SWAN Manuals": os.path.join(docs_base, "manuals")
-        }
-        
-        # Tab 1: Reports
-        with doc_tab1:
-            st.markdown("### Analysis Reports")
-            
-            # PDF upload option
-            with st.expander("📤 Upload Your Own PDF", expanded=False):
-                uploaded_pdf = st.file_uploader(
-                    "Choose a PDF file",
-                    type=['pdf'],
-                    key="pdf_uploader"
-                )
-                if uploaded_pdf:
-                    st.success(f"✅ Uploaded: {uploaded_pdf.name}")
-                    
-                    # Display uploaded PDF
-                    base64_pdf = base64.b64encode(uploaded_pdf.getvalue()).decode('utf-8')
-                    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500" type="application/pdf"></iframe>'
-                    st.markdown(pdf_display, unsafe_allow_html=True)
-            
-            # Display existing reports
-            reports_dir = pdf_dirs["Reports"]
-            if os.path.exists(reports_dir):
-                report_files = glob.glob(os.path.join(reports_dir, "*.pdf"))
-                if report_files:
-                    for report in report_files:
-                        with st.expander(f"📄 {os.path.basename(report)}", expanded=False):
-                            display_pdf_with_controls(report)
-                else:
-                    st.info("No reports found. Add PDFs to: `docs/reports/`")
-            else:
-                st.info(f"Create directory: `{reports_dir}` and add PDFs")
-        
-        # Tab 2: Technical Drawings
-        with doc_tab2:
-            st.markdown("### Technical Drawings & Schematics")
-            
-            drawings_dir = pdf_dirs["Technical Drawings"]
-            if os.path.exists(drawings_dir):
-                drawing_files = glob.glob(os.path.join(drawings_dir, "*.pdf"))
-                if drawing_files:
-                    # Display as gallery
-                    display_pdf_gallery(drawings_dir)
-                else:
-                    st.info("No drawings found. Add PDFs to: `docs/drawings/`")
-            else:
-                st.info(f"Create directory: `{drawings_dir}` and add PDFs")
-        
-        # Tab 3: SWAN Manuals
-        with doc_tab3:
-            st.markdown("### SWAN Model Documentation")
-            
-            manuals_dir = pdf_dirs["SWAN Manuals"]
-            if os.path.exists(manuals_dir):
-                manual_files = glob.glob(os.path.join(manuals_dir, "*.pdf"))
-                if manual_files:
-                    for manual in manual_files:
-                        with st.expander(f"📘 {os.path.basename(manual)}", expanded=False):
-                            display_pdf_with_controls(manual)
-                else:
-                    st.info("No manuals found. Add PDFs to: `docs/manuals/`")
-            else:
-                st.info(f"Create directory: `{manuals_dir}` and add PDFs")
-        
-        # Batch download option
-        st.markdown("---")
-        st.markdown("### 📦 Batch Download")
-        
-        # Collect all PDFs
-        all_pdfs = []
-        for dir_name, dir_path in pdf_dirs.items():
-            if os.path.exists(dir_path):
-                all_pdfs.extend(glob.glob(os.path.join(dir_path, "*.pdf")))
-        
-        if all_pdfs:
-            st.write(f"**Total documents available:** {len(all_pdfs)}")
-            
-            # Create ZIP of all PDFs
-            import zipfile
-            import io
-            
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for pdf_path in all_pdfs:
-                    with open(pdf_path, 'rb') as f:
-                        zip_file.writestr(os.path.basename(pdf_path), f.read())
-            
-            st.download_button(
-                label="📦 Download All Documents (ZIP)",
-                data=zip_buffer.getvalue(),
-                file_name="nyenje_bay_documents.zip",
-                mime="application/zip"
-            )
-                
-            
-        
 
 if __name__ == "__main__":
     main()
