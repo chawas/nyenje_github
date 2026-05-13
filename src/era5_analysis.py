@@ -64,7 +64,35 @@ DEBIAS_FACTOR = 0.718
 # ============================================================================
 # LOGO PATH
 # ============================================================================
-BASE_DIR = "/home/chawas/deployed/nyenje_github"
+#BASE_DIR = "/home/chawas/deployed/nyenje_github"
+# ============================================================================
+# BASE PATH DETECTION - WORKS ON ANY COMPUTER
+# ============================================================================
+
+def get_base_dir():
+    """
+    Automatically detect the base directory regardless of where the script is run from.
+    This works on any computer and doesn't rely on hardcoded paths.
+    """
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # If script is in src/ directory, go up one level
+    if os.path.basename(script_dir) == 'src':
+        base_dir = os.path.dirname(script_dir)
+    else:
+        base_dir = script_dir
+    
+    return base_dir
+
+# Set BASE_DIR dynamically
+BASE_DIR = get_base_dir()
+
+# For debugging - show the detected path (can remove after testing)
+print(f"Detected BASE_DIR: {BASE_DIR}")
+
+# Logo path
+LOGO_PATH = os.path.join(BASE_DIR, "docs", "images", "key_informatics.png")
 LOGO_PATH = os.path.join(BASE_DIR, "docs", "images", "key_informatics.png")
 
 def load_logo_base64():
@@ -842,6 +870,23 @@ def list_pdfs_in_directory(directory):
     if not os.path.exists(directory):
         return []
     return glob.glob(os.path.join(directory, "*.pdf"))
+
+# Add to your main script after imports
+def add_google_analytics():
+    google_analytics_js = """
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-YOUR_ID"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-YOUR_ID');
+    </script>
+    """
+    st.markdown(google_analytics_js, unsafe_allow_html=True)
+
+# Call it in main():
+add_google_analytics()
 
 # ============================================================================
 # Main App
