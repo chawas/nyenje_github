@@ -93,7 +93,7 @@ print(f"Detected BASE_DIR: {BASE_DIR}")
 
 # Logo path
 LOGO_PATH = os.path.join(BASE_DIR, "docs", "images", "key_informatics.png")
-LOGO_PATH = os.path.join(BASE_DIR, "docs", "images", "key_informatics.png")
+#LOGO_PATH = os.path.join(BASE_DIR, "docs", "images", "key_informatics.png")
 
 def load_logo_base64():
     if os.path.exists(LOGO_PATH):
@@ -257,97 +257,38 @@ def load_airport_data():
 # SWAN INPUT File Generator
 # ============================================================================
 def generate_swan_input_file(wind_file_path, output_file_path, timestamp,
-                                       west_hs=0.25, west_tp=2.8, west_dir=270,
-                                       north_reflection=0.10, east_reflection=0.10, south_reflection=0.12):
-    """
-    SWAN INPUT file for Nyenje Bay - CORRECTED GEOGRAPHY
-    
-    IMPORTANT: ONLY the WEST boundary is open to Lake Kariba
-    All other boundaries (North, East, South) are enclosed by land
-    
-    Parameters:
-    -----------
-    west_hs : float - Wave height entering from west (meters)
-    west_tp : float - Wave period from west (seconds)  
-    west_dir : float - Wave direction (270° = FROM west, traveling east)
-    north_reflection : float - Reflection coefficient at north shore (0.10 = 10%)
-    east_reflection : float - Reflection coefficient at east shore (0.10 = 10%)
-    south_reflection : float - Reflection coefficient at south shore (0.12 = 12%)
-    """
-    
+                             north_hs=0.25, north_tp=2.8, north_dir=180,
+                             south_reflection=0.10, west_reflection=0.05):
     swan_content = f"""PROJECT 'Nyenje Bay' '{timestamp[-4:]}' 'Debiased ERA5' ' ' ' '
 
 MODE STATIONARY TWODIMENSIONAL
 COORDINATES CARTESIAN
 SET LEVEL 0.00
-
-* ============================================================================
-* COMPUTATIONAL GRID (9x8 points, 500m resolution, 4.0km × 3.5km)
-* ============================================================================
 CGRID REGULAR 0.0 0.0 0.0 4000.0 3500.0 8 7 CIRCLE 36 0.04 1.00 25
 
-* ============================================================================
-* BOUNDARY CONDITIONS - NYENJE BAY CORRECTED GEOGRAPHY
-* ============================================================================
-* NOTE: Lake Kariba is on the WEST side. Waves enter ONLY from west.
-* North, East, and South boundaries are enclosed by land.
-
-* ----------------------------------------------------------------------------
-* WEST BOUNDARY (OPEN TO LAKE KARIBA) - Waves ENTER the bay from here
-* IJ range: (0,0) to (0,7) - Left edge of grid (x=0)
-* Direction 270° = FROM west, traveling EAST into the bay
-* ----------------------------------------------------------------------------
-BOUND SEGMENT IJ 0 0 0 7
-    SPEC OUT 2D {west_hs:.2f} {west_tp:.1f} {west_dir:.0f} 0.1 5 0.04 1.00 0 0
-
-* ----------------------------------------------------------------------------
-* EAST BOUNDARY (LAND - ENCLOSED) - No waves enter, partial reflection
-* IJ range: (8,0) to (8,7) - Right edge of grid (x=4000m)
-* ----------------------------------------------------------------------------
-BOUND SEGMENT IJ 8 0 8 7
-    REFL PAR {east_reflection:.2f}
-
-* ----------------------------------------------------------------------------
-* NORTH BOUNDARY (LAND - ENCLOSED) - No waves enter, partial reflection
-* IJ range: (0,7) to (8,7) - Top edge of grid (y=3500m)
-* ----------------------------------------------------------------------------
+* BOUNDARY CONDITIONS
 BOUND SEGMENT IJ 0 7 8 7
-    REFL PAR {north_reflection:.2f}
-
-* ----------------------------------------------------------------------------
-* SOUTH BOUNDARY (LAND - ENCLOSED) - No waves enter, partial reflection
-* IJ range: (0,0) to (8,0) - Bottom edge of grid (y=0)
-* ----------------------------------------------------------------------------
+    SPEC OUT 2D {north_hs:.2f} {north_tp:.1f} {north_dir:.0f} 0.1 5 0.02 0.5 0 0
 BOUND SEGMENT IJ 0 0 8 0
     REFL PAR {south_reflection:.2f}
+BOUND SEGMENT IJ 8 0 8 7
+    ABS
+BOUND SEGMENT IJ 0 0 0 7
+    REFL PAR {west_reflection:.2f}
 
-* ============================================================================
-* BATHYMETRY (CONSTANT - FROM FILE)
-* ============================================================================
+* CONSTANT BATHYMETRY
 INPGRID BOTTOM REGULAR 0.0 0.0 0.0 9 8 500.0 500.0
 READINP BOTTOM 1.0 'nyenje_bathymetry_9x8.bot' 1 0 FREE
 
-* ============================================================================
-* WIND INPUT (VARIABLE - CHANGES EACH RUN)
-* ============================================================================
+* VARIABLE WIND INPUT (CHANGES EACH RUN)
 INPGRID WIND REGULAR 0.0 0.0 0.0 9 8 500.0 500.0
 READINP WIND 1 '{os.path.basename(wind_file_path)}' 4 0 FREE
 
-* ============================================================================
-* PHYSICAL PROCESSES
-* ============================================================================
 GEN3 KOMEN 2.36E-5 3.02E-3
 FRICTION JONSWAP CONSTANT 0.038
 BREAKING CONSTANT 1.0 0.73
-
-* ============================================================================
-* NUMERICAL CONTROLS
-* ============================================================================
 NUMERIC STOPC 0.02 0.01 0.001 98 STAT 50 0.01
 
-* ============================================================================
-* OUTPUT REQUESTS
-* ============================================================================
 BLOCK 'COMPGRID' NOHEADER '{output_file_path}' LAYOUT 4 HSIGN TM01 DIR
 POINTS 'CENTER' 2000.0 1750.0
 TABLE 'CENTER' NOHEADER 'swan_center_{timestamp}.txt' HSIGN TM01 DIR
@@ -549,12 +490,6 @@ def calculate_wave_height(wind_speed, fetch_km=4):
     return hs, tp
 
 def generate_swan_wave_distribution(wind_speed, wind_direction):
-    """
-    Calculate wave distribution for Nyenje Bay - CORRECTED for WEST fetch
-    
-    Since the open lake is on the WEST side, fetch increases with distance
-    from the west shore (x=0).
-    """
     if REAL_BATHYMETRY is not None:
         depth = REAL_BATHYMETRY
     else:
@@ -563,16 +498,18 @@ def generate_swan_wave_distribution(wind_speed, wind_direction):
         X, Y = np.meshgrid(x, y)
         depth = 30 - (Y / DOMAIN_Y) * 28.5
         depth = np.maximum(depth, 1.5)
-    
     x = np.linspace(0, DOMAIN_X, NX)
     y = np.linspace(0, DOMAIN_Y, NY)
     X, Y = np.meshgrid(x, y)
-    
-    # CORRECTED: Fetch from WEST (open lake is at x=0)
-    # Fetch = distance from west shore in kilometers
-    fetch_west = X / 1000  # X increases from 0 at west to 4000m at east
-    fetch = np.maximum(fetch_west, 0.5)  # Minimum fetch 0.5 km
-    
+    if 45 <= wind_direction <= 135:
+        fetch = (DOMAIN_X - X) / 1000
+    elif 135 < wind_direction <= 225:
+        fetch = Y / 1000
+    elif 225 < wind_direction <= 315:
+        fetch = X / 1000
+    else:
+        fetch = (DOMAIN_Y - Y) / 1000
+    fetch = np.maximum(fetch, 0.5)
     g = 9.81
     hs_base = 0.0016 * (wind_speed**2 / g) * np.sqrt(g * fetch * 1000 / (wind_speed**2 + 0.1))
     tp_base = 0.286 * (wind_speed / g) * (g * fetch * 1000 / (wind_speed**2 + 0.1)) ** 0.33
@@ -580,8 +517,8 @@ def generate_swan_wave_distribution(wind_speed, wind_direction):
     max_wave_height = gamma * depth
     hs = np.minimum(hs_base, max_wave_height)
     tp = np.minimum(tp_base, 3.0 * np.sqrt(depth / g))
-    
     return hs, tp, depth
+
 def create_nyenje_grid():
     x_coords = np.linspace(0, DOMAIN_X, NX)
     y_coords = np.linspace(0, DOMAIN_Y, NY)
@@ -1144,180 +1081,123 @@ def main():
                     elif not files:
                         st.error(f"❌ No supported files found in {use_dir}")
                     else:
-                        # Create a status container for the progress bar
-                        progress_container = st.container()
+                        # Create a placeholder for dynamic updates
+                        progress_placeholder = st.empty()
+                        status_placeholder = st.empty()
+                        file_placeholder = st.empty()
+                        time_placeholder = st.empty()
                         
-                        with progress_container:
-                            # Create a progress bar
-                            progress_bar = st.progress(0, text="Initializing...")
+                        # Initialize
+                        all_results = []
+                        total_files = len(files)
+                        start_time = datetime.now()
+                        
+                        # Show initial progress bar
+                        progress_bar = progress_placeholder.progress(0)
+                        status_placeholder.info(f"📊 Processing {total_files} files...")
+                        
+                        # Process each file with forced UI updates
+                        for i, file_path in enumerate(files):
+                            filename = os.path.basename(file_path)
+                            percent = ((i + 1) / total_files) * 100
                             
-                            # Create columns for status information
-                            col_status1, col_status2 = st.columns(2)
-                            with col_status1:
-                                file_status = st.empty()
-                                record_status = st.empty()
-                            with col_status2:
-                                time_status = st.empty()
-                                speed_status = st.empty()
+                            # Update progress bar
+                            progress_bar.progress((i + 1) / total_files)
                             
-                            # Create a placeholder for detailed progress
-                            detail_container = st.expander("📋 Processing Details", expanded=True)
+                            # Update file status
+                            file_placeholder.info(f"📄 Processing: **{filename}** ({i+1}/{total_files})")
                             
-                            # Initialize tracking variables
-                            all_results = []
-                            total_files = len(files)
-                            start_time = datetime.now()
-                            processed_files = 0
-                            file_log = []
-                            
-                            # Display file list
-                            with detail_container:
-                                st.markdown(f"**Files to process:** {total_files}")
-                                file_list_area = st.empty()
-                            
-                            # Process each file with real-time updates
-                            for i, file_path in enumerate(files):
-                                filename = os.path.basename(file_path)
-                                processed_files = i + 1
-                                percent = (processed_files / total_files) * 100
-                                
-                                # Update progress bar
-                                progress_bar.progress(processed_files / total_files, 
-                                                     text=f"Processing: {processed_files}/{total_files} files ({percent:.1f}%)")
-                                
-                                # Update file status
-                                file_status.info(f"📄 **Current File:** {filename}")
-                                record_status.info(f"📊 **Progress:** {processed_files}/{total_files} files")
-                                
-                                # Calculate time estimates
+                            # Show estimated time
+                            if i > 0:
                                 elapsed = (datetime.now() - start_time).total_seconds()
-                                if i > 0:
-                                    avg_time_per_file = elapsed / i
-                                    remaining = avg_time_per_file * (total_files - processed_files)
-                                    time_status.info(f"⏱️ **Estimated remaining:** {remaining/60:.1f} minutes")
-                                    speed_status.info(f"⚡ **Processing speed:** {avg_time_per_file:.1f} seconds/file")
-                                else:
-                                    time_status.info("⏱️ **Estimated remaining:** Calculating...")
-                                    speed_status.info("⚡ **Processing speed:** Calculating...")
-                                
-                                # Update file list display (show current file highlighted)
-                                with detail_container:
-                                    with file_list_area.container():
-                                        # Show last 5 files processed
-                                        st.markdown("**Recently processed:**")
-                                        for log_file in file_log[-5:]:
-                                            st.text(f"✅ {log_file}")
-                                        st.markdown(f"**Currently processing:** 🔄 {filename}")
-                                
-                                # Force Streamlit to update immediately
-                                import time
-                                time.sleep(0.01)
-                                
-                                # Process the file
-                                try:
-                                    results = extract_wind_from_file(file_path, NYENJE_CENTER_LAT, NYENJE_CENTER_LON)
-                                    if results:
-                                        all_results.extend(results)
-                                        file_log.append(f"✅ {filename} ({len(results)} records)")
-                                    else:
-                                        file_log.append(f"⚠️ {filename} (no data extracted)")
-                                except Exception as e:
-                                    file_log.append(f"❌ {filename} (error: {str(e)[:50]})")
+                                avg_time = elapsed / i
+                                remaining = avg_time * (total_files - i)
+                                time_placeholder.caption(f"⏱️ Estimated remaining: {remaining/60:.1f} minutes | ⏱️ Elapsed: {elapsed/60:.1f} min")
                             
-                            # Clear progress indicators and show completion
-                            progress_bar.progress(1.0, text="✅ Processing Complete!")
-                            file_status.success(f"✅ Successfully processed {processed_files}/{total_files} files")
+                            # Force Streamlit to update (critical!)
+                            import time
+                            time.sleep(0.01)  # Tiny pause to allow UI update
+                            
+                            # Process the file
+                            results = extract_wind_from_file(file_path, NYENJE_CENTER_LAT, NYENJE_CENTER_LON)
+                            if results:
+                                all_results.extend(results)
+                        
+                        # Clear placeholders
+                        progress_placeholder.empty()
+                        status_placeholder.empty()
+                        file_placeholder.empty()
+                        time_placeholder.empty()
+                        
+                        if not all_results:
+                            st.error("❌ No data could be extracted from the files")
+                        else:
+                            # Convert to DataFrame (same as before)
+                            df = pd.DataFrame(all_results)
+                            df['datetime'] = pd.to_datetime(df['time'])
+                            df = df.sort_values('datetime').reset_index(drop=True)
+                            df['hour'] = df['datetime'].dt.hour
+                            df['year'] = df['datetime'].dt.year
+                            df['month'] = df['datetime'].dt.month
+                            df['day'] = df['datetime'].dt.day
+                            
+                            # Calculate wind averages
+                            wind_avg = calculate_wind_averages(df['speed'].values, df['datetime'])
+                            df['wind_speed_3min'] = wind_avg['wind_3min']
+                            df['wind_speed_10min'] = wind_avg['wind_10min']
+                            df['gust_3sec'] = wind_avg['gust_3sec']
+                            df['gust_10sec'] = wind_avg['gust_10sec']
+                            df['wind_speed_hourly'] = df['speed']
+                            df['wind_direction'] = df['direction']
+                            
+                            # Calculate statistics
+                            diurnal_means = df.groupby('hour')['speed'].mean().reindex(range(24), fill_value=0).tolist()
+                            yearly_max = df.groupby('year')['speed'].max().to_dict()
+                            global_max_speed = df['speed'].max()
+                            global_max_year = df.loc[df['speed'].idxmax(), 'year'] if not df.empty else None
+                            
+                            # Create result dictionary
+                            result = {
+                                'df': df,
+                                'all_speeds': df['speed'].values,
+                                'all_directions': df['direction'].values,
+                                'all_times': df['datetime'].values,
+                                'diurnal_means': diurnal_means,
+                                'yearly_max': yearly_max,
+                                'global_max': {'speed': global_max_speed, 'year': global_max_year},
+                                'total_records': len(df),
+                                'years': sorted(df['year'].unique()),
+                            }
+                            
+                            # Store in session state
+                            st.session_state.processed_data = result
+                            st.session_state.processed = True
+                            st.session_state.data_source = source_name
                             
                             total_time = (datetime.now() - start_time).total_seconds()
-                            time_status.success(f"✅ **Total processing time:** {total_time:.1f} seconds ({total_time/60:.1f} minutes)")
-                            speed_status.empty()
                             
-                            # Show completion summary
-                            with detail_container:
-                                st.markdown("### ✅ Processing Summary")
-                                st.markdown(f"**Files processed:** {processed_files}/{total_files}")
-                                st.markdown(f"**Total records extracted:** {len(all_results):,}")
-                                st.markdown(f"**Time taken:** {total_time:.1f} seconds")
+                            # Display summary
+                            st.markdown("---")
+                            st.markdown("### 📊 Processing Summary")
                             
-                            if not all_results:
-                                st.error("❌ No data could be extracted from the files")
-                                progress_container.empty()
-                            else:
-                                # Convert to DataFrame
-                                df = pd.DataFrame(all_results)
-                                df['datetime'] = pd.to_datetime(df['time'])
-                                df = df.sort_values('datetime').reset_index(drop=True)
-                                df['hour'] = df['datetime'].dt.hour
-                                df['year'] = df['datetime'].dt.year
-                                df['month'] = df['datetime'].dt.month
-                                df['day'] = df['datetime'].dt.day
-                                
-                                # Calculate wind averages
-                                wind_avg = calculate_wind_averages(df['speed'].values, df['datetime'])
-                                df['wind_speed_3min'] = wind_avg['wind_3min']
-                                df['wind_speed_10min'] = wind_avg['wind_10min']
-                                df['gust_3sec'] = wind_avg['gust_3sec']
-                                df['gust_10sec'] = wind_avg['gust_10sec']
-                                df['wind_speed_hourly'] = df['speed']
-                                df['wind_direction'] = df['direction']
-                                
-                                # Calculate statistics
-                                diurnal_means = df.groupby('hour')['speed'].mean().reindex(range(24), fill_value=0).tolist()
-                                yearly_max = df.groupby('year')['speed'].max().to_dict()
-                                global_max_speed = df['speed'].max()
-                                global_max_year = df.loc[df['speed'].idxmax(), 'year'] if not df.empty else None
-                                
-                                # Create result dictionary
-                                result = {
-                                    'df': df,
-                                    'all_speeds': df['speed'].values,
-                                    'all_directions': df['direction'].values,
-                                    'all_times': df['datetime'].values,
-                                    'diurnal_means': diurnal_means,
-                                    'yearly_max': yearly_max,
-                                    'global_max': {'speed': global_max_speed, 'year': global_max_year},
-                                    'total_records': len(df),
-                                    'years': sorted(df['year'].unique()),
-                                }
-                                
-                                # Store in session state
-                                st.session_state.processed_data = result
-                                st.session_state.processed = True
-                                st.session_state.data_source = source_name
-                                
-                                # Clear the progress container
-                                progress_container.empty()
-                                
-                                # Display summary
-                                st.markdown("---")
-                                st.markdown("### 📊 Processing Summary")
-                                
-                                col_a, col_b, col_c, col_d = st.columns(4)
-                                with col_a:
-                                    st.metric("📁 Files Processed", f"{processed_files}/{total_files}")
-                                with col_b:
-                                    st.metric("📅 Total Records", f"{result['total_records']:,}")
-                                with col_c:
-                                    st.metric("📆 Years Range", f"{result['years'][0]} - {result['years'][-1]}")
-                                with col_d:
-                                    st.metric("💨 Max Wind", f"{result['global_max']['speed']:.2f} m/s")
-                                
-                                # Show data quality metrics
-                                mean_dir, strength = calculate_circular_mean(result['all_directions'])
-                                st.success(f"✅ **Data Summary:** Mean wind speed: {np.mean(result['all_speeds']):.2f} m/s | Mean direction: {mean_dir:.1f}° ({wind_direction_to_cardinal(mean_dir)})")
-                                st.info(f"⏱️ Total processing time: {total_time:.1f} seconds")
-                                
-                                # Show detailed log
-                                with st.expander("📋 Detailed Processing Log", expanded=False):
-                                    for log_entry in file_log:
-                                        st.text(log_entry)
-                                
-                                if "Debiased" in source_name:
-                                    st.balloons()
-                                    st.success("🎉 **Using DEBIASED ERA5 - NE prevailing direction expected**")
-        
-        
-        
+                            col_a, col_b, col_c, col_d = st.columns(4)
+                            with col_a:
+                                st.metric("📁 Files Processed", f"{len(files)}/{len(files)}")
+                            with col_b:
+                                st.metric("📅 Total Records", f"{result['total_records']:,}")
+                            with col_c:
+                                st.metric("📆 Years Range", f"{result['years'][0]} - {result['years'][-1]}")
+                            with col_d:
+                                st.metric("💨 Max Wind", f"{result['global_max']['speed']:.2f} m/s")
+                            
+                            # Show data quality metrics
+                            mean_dir, strength = calculate_circular_mean(result['all_directions'])
+                            st.success(f"✅ **Data Summary:** Mean wind speed: {np.mean(result['all_speeds']):.2f} m/s | Mean direction: {mean_dir:.1f}° ({wind_direction_to_cardinal(mean_dir)})")
+                            st.info(f"⏱️ Total processing time: {total_time:.1f} seconds")
+                            
+                            if "Debiased" in source_name:
+                                st.balloons()
+                                st.success("🎉 **Using DEBIASED ERA5 - NE prevailing direction expected**")
         with sub5:
             st.markdown("### 🌊 Extract SWAN Wind Files")
             extract_year = st.selectbox("Select Year", list(range(1971, 2021)), index=49)
@@ -1769,297 +1649,101 @@ def main():
         ])
         
         with gallery_tab1:
-            st.subheader("📸 Nyenje Bay Photographs & Files")
+            st.subheader("📸 Nyenje Bay Photographs")
             
-            # Create tabs for different browsing options
-            browse_tab1, browse_tab2, browse_tab3 = st.tabs([
-                "📁 File Browser", "📤 Upload Files", "📍 Site Information"
-            ])
-            
-            # ============================================================
-            # TAB 1: File Browser - Browse ANYWHERE on hard disk
-            # ============================================================
-            with browse_tab1:
-                st.markdown("### 📁 Browse Files on Computer")
-                st.info("Browse any folder on your computer to view images and PDFs")
-                
-                # Initialize session state for file browser
-                if 'current_browse_path' not in st.session_state:
-                    st.session_state.current_browse_path = os.path.expanduser("~")
-                if 'browse_history' not in st.session_state:
-                    st.session_state.browse_history = []
-                
-                # Function to browse directory
-                def browse_directory(path):
-                    if os.path.exists(path) and os.path.isdir(path):
-                        st.session_state.current_browse_path = path
-                        # Add to history
-                        if path not in st.session_state.browse_history:
-                            st.session_state.browse_history.append(path)
-                        # Keep history limited to 20 items
-                        if len(st.session_state.browse_history) > 20:
-                            st.session_state.browse_history.pop(0)
-                
-                # Quick access buttons
-                st.markdown("#### 🚀 Quick Access")
-                col_q1, col_q2, col_q3, col_q4, col_q5 = st.columns(5)
-                with col_q1:
-                    if st.button("🏠 Home", use_container_width=True):
-                        browse_directory(os.path.expanduser("~"))
-                with col_q2:
-                    if st.button("📁 Desktop", use_container_width=True):
-                        browse_directory(os.path.expanduser("~/Desktop"))
-                with col_q3:
-                    if st.button("🖼️ Pictures", use_container_width=True):
-                        browse_directory(os.path.expanduser("~/Pictures"))
-                with col_q4:
-                    if st.button("📄 Documents", use_container_width=True):
-                        browse_directory(os.path.expanduser("~/Documents"))
-                with col_q5:
-                    if st.button("💾 Downloads", use_container_width=True):
-                        browse_directory(os.path.expanduser("~/Downloads"))
-                
-                # Project directory button
-                col_p1, col_p2, col_p3 = st.columns(3)
-                with col_p1:
-                    if st.button("📍 Nyenje Project", use_container_width=True):
-                        browse_directory(BASE_DIR)
-                with col_p2:
-                    if st.button("📊 Data Directory", use_container_width=True):
-                        browse_directory(os.path.join(BASE_DIR, "data"))
-                with col_p3:
-                    if st.button("📸 Images Directory", use_container_width=True):
-                        img_dir = os.path.join(BASE_DIR, "docs", "images")
-                        if os.path.exists(img_dir):
-                            browse_directory(img_dir)
-                        else:
-                            browse_directory(BASE_DIR)
-                
-                st.markdown("---")
-                
-                # Navigation row
-                col_nav1, col_nav2, col_nav3 = st.columns([2, 1, 2])
-                with col_nav1:
-                    # Parent directory button
-                    parent_dir = os.path.dirname(st.session_state.current_browse_path)
-                    if parent_dir != st.session_state.current_browse_path:
-                        if st.button("📂 ⬆ Parent Directory", use_container_width=True):
-                            browse_directory(parent_dir)
-                
-                with col_nav2:
-                    # Refresh button
-                    if st.button("🔄 Refresh", use_container_width=True):
-                        st.rerun()
-                
-                with col_nav3:
-                    # History dropdown
-                    if st.session_state.browse_history:
-                        history_option = st.selectbox(
-                            "📜 History",
-                            ["-- Select previous location --"] + st.session_state.browse_history[::-1]
-                        )
-                        if history_option != "-- Select previous location --":
-                            browse_directory(history_option)
-                            st.rerun()
-                
-                # Show current path
-                st.markdown(f"**Current Location:** `{st.session_state.current_browse_path}`")
-                
-                # Custom path input
-                col_path1, col_path2 = st.columns([4, 1])
-                with col_path1:
-                    custom_path = st.text_input(
-                        "Or enter custom path:",
-                        value=st.session_state.current_browse_path,
-                        key="custom_path_input"
-                    )
-                with col_path2:
-                    if st.button("Go", use_container_width=True):
-                        if os.path.exists(custom_path):
-                            browse_directory(custom_path)
-                            st.rerun()
-                        else:
-                            st.error(f"Path not found: {custom_path}")
-                
-                st.markdown("---")
-                
-                # Check if current path exists
-                if os.path.exists(st.session_state.current_browse_path):
-                    try:
-                        # Get all items in directory
-                        items = []
-                        try:
-                            items = os.listdir(st.session_state.current_browse_path)
-                        except PermissionError:
-                            st.error(f"❌ Permission denied: Cannot access {st.session_state.current_browse_path}")
-                            items = []
-                        
-                        if items:
-                            # Separate directories and files
-                            directories = []
-                            image_files = []
-                            pdf_files = []
-                            other_files = []
-                            
-                            for item in sorted(items):
-                                item_path = os.path.join(st.session_state.current_browse_path, item)
-                                try:
-                                    if os.path.isdir(item_path):
-                                        directories.append(item)
-                                    elif item.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff')):
-                                        image_files.append(item)
-                                    elif item.lower().endswith('.pdf'):
-                                        pdf_files.append(item)
-                                    else:
-                                        other_files.append(item)
-                                except:
-                                    pass
-                            
-                            # Display statistics
-                            st.info(f"📊 **Contents:** {len(directories)} folders | {len(image_files)} images | {len(pdf_files)} PDFs | {len(other_files)} other files")
-                            
-                            # ================================================
-                            # DISPLAY DIRECTORIES (Folders)
-                            # ================================================
-                            if directories:
-                                st.markdown("#### 📁 Folders")
-                                # Display in 4 columns
-                                cols = st.columns(4)
-                                for idx, folder in enumerate(directories[:40]):  # Limit to 40 folders
-                                    with cols[idx % 4]:
-                                        folder_path = os.path.join(st.session_state.current_browse_path, folder)
-                                        if st.button(f"📂 {folder}", key=f"folder_{idx}", use_container_width=True):
-                                            browse_directory(folder_path)
-                                            st.rerun()
-                                if len(directories) > 40:
-                                    st.caption(f"... and {len(directories) - 40} more folders")
-                            
-                            # ================================================
-                            # DISPLAY IMAGE FILES
-                            # ================================================
-                            if image_files:
-                                st.markdown("#### 🖼️ Image Files")
-                                st.info(f"Found {len(image_files)} image(s)")
-                                
-                                # Display images in a grid (3 columns)
-                                img_cols = st.columns(3)
-                                for idx, img_file in enumerate(image_files[:30]):  # Limit to 30 images
-                                    img_path = os.path.join(st.session_state.current_browse_path, img_file)
-                                    with img_cols[idx % 3]:
-                                        try:
-                                            st.image(img_path, caption=img_file, use_container_width=True)
-                                            
-                                            # Download button for the image
-                                            with open(img_path, "rb") as f:
-                                                st.download_button(
-                                                    label=f"📥 Download",
-                                                    data=f.read(),
-                                                    file_name=img_file,
-                                                    mime="image/jpeg",
-                                                    key=f"browse_img_{idx}"
-                                                )
-                                        except Exception as e:
-                                            st.error(f"Could not load: {img_file}")
-                                
-                                if len(image_files) > 30:
-                                    st.caption(f"... and {len(image_files) - 30} more images")
-                            
-                            # ================================================
-                            # DISPLAY PDF FILES
-                            # ================================================
-                            if pdf_files:
-                                st.markdown("#### 📄 PDF Documents")
-                                st.info(f"Found {len(pdf_files)} PDF(s)")
-                                
-                                for idx, pdf_file in enumerate(pdf_files[:20]):  # Limit to 20 PDFs
-                                    pdf_path = os.path.join(st.session_state.current_browse_path, pdf_file)
-                                    with st.expander(f"📑 {pdf_file}", expanded=False):
-                                        # Get file size
-                                        file_size = os.path.getsize(pdf_path) / 1024  # KB
-                                        st.caption(f"Size: {file_size:.1f} KB")
-                                        
-                                        # Display PDF
-                                        try:
-                                            with open(pdf_path, "rb") as f:
-                                                pdf_data = f.read()
-                                            base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-                                            st.markdown(
-                                                f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400" type="application/pdf"></iframe>',
-                                                unsafe_allow_html=True
-                                            )
-                                            st.download_button(
-                                                label="📥 Download PDF",
-                                                data=pdf_data,
-                                                file_name=pdf_file,
-                                                mime="application/pdf",
-                                                key=f"browse_pdf_{idx}"
-                                            )
-                                        except Exception as e:
-                                            st.error(f"Could not load PDF: {e}")
-                            
-                            # ================================================
-                            # DISPLAY OTHER FILES
-                            # ================================================
-                            if other_files:
-                                st.markdown("#### 📎 Other Files")
-                                st.caption(f"{len(other_files)} other file(s) in this directory")
-                                with st.expander(f"Show {len(other_files)} other files", expanded=False):
-                                    for other_file in other_files[:50]:
-                                        file_path = os.path.join(st.session_state.current_browse_path, other_file)
-                                        file_size = os.path.getsize(file_path) / 1024
-                                        st.text(f"📄 {other_file} ({file_size:.1f} KB)")
-                        else:
-                            st.info("📂 This folder is empty")
-                            
-                    except Exception as e:
-                        st.error(f"Error reading directory: {e}")
-                else:
-                    st.error(f"❌ Path does not exist: {st.session_state.current_browse_path}")
-            
-            # ============================================================
-            # TAB 2: Upload Files
-            # ============================================================
-            with browse_tab2:
-                st.markdown("### 📤 Upload Your Own Files")
-                
-                uploaded_files = st.file_uploader(
-                    "Choose files (images or PDFs)",
-                    type=['jpg', 'jpeg', 'png', 'gif', 'pdf'],
+            # Add file uploader for users to upload their own photos
+            with st.expander("📤 Upload Your Own Photos", expanded=False):
+                uploaded_photos = st.file_uploader(
+                    "Choose photos of Nyenje Bay",
+                    type=['jpg', 'jpeg', 'png', 'gif'],
                     accept_multiple_files=True,
-                    key="photo_uploader_main"
+                    key="photo_uploader"
                 )
                 
-                if uploaded_files:
-                    st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
-                    
-                    for idx, uploaded_file in enumerate(uploaded_files):
-                        with st.expander(f"📄 {uploaded_file.name}", expanded=False):
-                            if uploaded_file.type == "application/pdf":
-                                # Display PDF
-                                base64_pdf = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                                st.markdown(
-                                    f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400" type="application/pdf"></iframe>',
-                                    unsafe_allow_html=True
-                                )
-                            else:
-                                # Display image
-                                st.image(uploaded_file, caption=uploaded_file.name, use_container_width=True)
-                            
-                            # Download button
-                            st.download_button(
-                                label=f"📥 Download {uploaded_file.name}",
-                                data=uploaded_file.getvalue(),
-                                file_name=uploaded_file.name,
-                                mime=uploaded_file.type,
-                                key=f"uploaded_{idx}"
-                            )
+                if uploaded_photos:
+                    st.success(f"✅ {len(uploaded_photos)} photos uploaded")
+                    for photo in uploaded_photos:
+                        st.image(photo, caption=photo.name, use_container_width=True)
             
-            # ============================================================
-            # TAB 3: Site Information
-            # ============================================================
-            with browse_tab3:
-                st.markdown("### 📍 Site Information")
+            # Define possible image paths (local files)
+            st.markdown("---")
+            st.markdown("### 📁 Local Site Photos")
+            
+            image_dirs = [
+                os.path.join(BASE_DIR, "docs", "images"),
+                os.path.join(BASE_DIR, "docs", "images", "nyenje"),
+                os.path.join(BASE_DIR, "data", "images"),
+                os.path.join(BASE_DIR, "photos"),
+            ]
+            
+            # Collect all images from directories
+            all_images = []
+            for img_dir in image_dirs:
+                if os.path.exists(img_dir):
+                    for ext in ['*.jpg', '*.jpeg', '*.png', '*.gif']:
+                        all_images.extend(glob.glob(os.path.join(img_dir, ext)))
+            
+            if all_images:
+                # Add a button to browse and select images
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("🖼️ Show All Local Photos", use_container_width=True):
+                        st.session_state.show_all_photos = True
+                with col_btn2:
+                    if st.button("📁 Browse Photo Directory", use_container_width=True):
+                        st.session_state.browse_photos = True
+                
+                # Display photos in a grid
+                if st.session_state.get('show_all_photos', False):
+                    st.markdown("### 🖼️ Photo Gallery")
+                    
+                    # Display in 3 columns
+                    cols = st.columns(3)
+                    for idx, img_path in enumerate(all_images):
+                        with cols[idx % 3]:
+                            st.image(img_path, caption=os.path.basename(img_path), use_container_width=True)
+                            # Add download button for each image
+                            with open(img_path, "rb") as f:
+                                st.download_button(
+                                    label=f"📥 Download",
+                                    data=f.read(),
+                                    file_name=os.path.basename(img_path),
+                                    mime="image/jpeg",
+                                    key=f"download_{idx}"
+                                )
+                
+                # Browse directory
+                if st.session_state.get('browse_photos', False):
+                    st.markdown("### 📁 Photo Directory Browser")
+                    for img_dir in image_dirs:
+                        if os.path.exists(img_dir):
+                            st.code(f"📂 {img_dir}")
+                            for f in os.listdir(img_dir)[:10]:
+                                if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                                    st.text(f"  📷 {f}")
+            else:
+                st.info("""
+                ### 📸 Add Site Photos
+                
+                **Ways to add photos:**
+                1. **Upload above** - Use the file uploader to add photos temporarily
+                2. **Add to folder** - Place images in one of these folders:
+                   - `docs/images/nyenje/`
+                   - `data/images/`
+                   - `photos/`
+                3. **Browse** - Use the buttons above to browse available photos
+                
+                **Recommended images:**
+                - Aerial/satellite view of Nyenje Bay
+                - Shoreline conditions
+                - Fetch length perspective
+                - Bathymetry visualization
+                """)
+                
+                st.markdown("---")
                 st.markdown("""
+                ### 📋 Site Context
+                
                 | Parameter | Value |
                 |-----------|-------|
                 | **Location** | Nyenje Bay, Lake Kariba |
@@ -2070,35 +1754,7 @@ def main():
                 | **Grid Resolution** | 9 × 8 points (500 m spacing) |
                 | **Fetch Length** | 4 km (West direction - open lake) |
                 | **Water Depth** | 1.5 m (shallow) to 30 m (deep) |
-                | **Open Boundary** | WEST only |
-                | **Closed Boundaries** | North, East, South |
                 """)
-                
-                st.markdown("---")
-                st.markdown("### 💡 Tips for Using File Browser")
-                st.markdown("""
-                - Use **Quick Access** buttons to jump to common folders
-                - Click **Parent Directory** to go up one level
-                - Enter any **custom path** to browse any location
-                - Use **History** to go back to previous locations
-                - Images are displayed as thumbnails
-                - PDFs can be viewed inline
-                - You can download any file you browse
-                """)
-                
-                st.markdown("---")
-                st.markdown("### 📂 Default Image Locations")
-                st.markdown("""
-                The tool also looks for images in these project folders:
-                - `docs/images/`
-                - `docs/images/nyenje/`
-                - `data/images/`
-                - `photos/`
-                
-                To add permanent images, place them in these directories.
-                """)        
-                
-                
         with gallery_tab2:
             st.subheader("🗺️ Nyenje Bay Location Map")
             
